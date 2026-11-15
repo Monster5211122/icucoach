@@ -1,0 +1,199 @@
+:root {
+  --bg: #0f1419;
+  --card: #1a2129;
+  --card2: #232c36;
+  --text: #e8edf2;
+  --muted: #8b98a5;
+  --accent: #2dd4bf;
+  --accent2: #fb923c;
+  --danger: #f87171;
+  --border: #2b3541;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif;
+  font-size: 16px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding: 0 0 84px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  background: rgba(15,20,25,.92); backdrop-filter: blur(10px);
+}
+.topbar-title { font-size: 19px; font-weight: 700; }
+
+.ghost-btn {
+  background: var(--card2); color: var(--text); border: 1px solid var(--border);
+  padding: 7px 14px; border-radius: 10px; font-size: 14px;
+}
+
+.view { padding: 8px 16px; }
+.view.hidden { display: none; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px; margin-bottom: 14px;
+}
+.card-title { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 600; }
+
+/* 今日建议 */
+.daily-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.daily-head .card-title { margin: 0; }
+.daily-date { font-weight: 400; font-size: 12px; }
+
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.stat {
+  background: var(--card2); border-radius: 12px; padding: 12px 8px; text-align: center;
+}
+.stat-num { font-size: 24px; font-weight: 800; color: var(--accent); }
+.stat-num.form-pos { color: var(--accent); }
+.stat-num.form-neg { color: var(--danger); }
+.stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.kv { border-top: 1px solid var(--border); }
+.kv-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 2px; border-bottom: 1px solid var(--border);
+}
+.kv-row:last-child { border-bottom: none; }
+.kv-row span { color: var(--muted); font-size: 14px; }
+.kv-row b { font-size: 15px; }
+
+.form-row { margin-bottom: 12px; }
+.form-row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+input, select, textarea {
+  width: 100%; background: var(--card2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 11px 12px; font-size: 15px; font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; }
+
+.primary-btn {
+  width: 100%; background: var(--accent); color: #06281f; border: none;
+  border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 700;
+  margin-top: 4px;
+}
+.primary-btn:disabled { background: var(--border); color: var(--muted); }
+
+.hint { font-size: 13px; color: var(--muted); margin-top: 10px; }
+.hint code { color: var(--accent2); }
+
+/* Markdown 渲染 */
+.markdown { font-size: 15px; }
+.markdown h2 { font-size: 16px; color: var(--accent); margin: 16px 0 6px; }
+.markdown h2:first-child { margin-top: 0; }
+.markdown h3 { font-size: 15px; color: var(--accent2); margin: 12px 0 4px; }
+.markdown p { margin: 6px 0; }
+.markdown ul, .markdown ol { margin: 6px 0; padding-left: 20px; }
+.markdown li { margin: 3px 0; }
+.markdown strong { color: #fff; }
+.markdown code { background: var(--card2); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+.markdown pre { background: var(--card2); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+
+/* 课表列表 */
+.workout-item {
+  background: var(--card2); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px; margin-bottom: 10px;
+}
+.workout-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.workout-name { font-weight: 700; }
+.workout-date { font-size: 12px; color: var(--muted); }
+.workout-type { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: var(--accent); color: #06281f; font-weight: 700; }
+.workout-type.rest { background: var(--muted); color: #111; }
+.workout-desc { font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+
+/* Tabbar */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; max-width: 560px; margin: 0 auto;
+  background: rgba(26,33,41,.96); backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  flex: 1; background: none; border: none; color: var(--muted);
+  padding: 13px 0; font-size: 14px;
+}
+.tab.active { color: var(--accent); font-weight: 700; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+  background: #333; color: #fff; padding: 10px 18px; border-radius: 24px;
+  font-size: 14px; z-index: 30; max-width: 86%; text-align: center;
+}
+.toast.hidden { display: none; }
+
+.loading {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(15,20,25,.6);
+}
+.loading.hidden { display: none; }
+.spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 4px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 复选框行 */
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.check-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* 当天可选课表：选择按钮与选中态 */
+.workout-item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pick-btn {
+  width: 100%; margin-top: 10px; padding: 10px;
+  background: var(--card); color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 10px;
+  font-size: 14px; font-weight: 700;
+}
+.workout-item.selected .pick-btn { background: var(--accent); color: #06281f; }
+
+/* 对话（全局浮动） */
+.chat-fab {
+  position: fixed; right: 16px; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 20;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--accent); border: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+}
+.chat-overlay {
+  position: fixed; inset: 0; z-index: 25;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 14px);
+}
+.chat-overlay.hidden { display: none; }
+.chat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.chat-title { font-size: 17px; font-weight: 700; }
+.chat-close {
+  background: var(--card2); color: var(--text); border: 1px solid var(--border);
+  width: 36px; height: 36px; border-radius: 50%; font-size: 20px; line-height: 1;
+}
+.chat-hint { font-size: 13px; color: var(--muted); text-align: center; margin: 4px 0 10px; }
+.chat-wrap { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0 8px; }
+.msg { max-width: 88%; padding: 10px 13px; border-radius: 14px; font-size: 15px; }
+.msg.user { align-self: flex-end; background: var(--accent); color: #06281f; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+.msg.ai { align-self: flex-start; background: var(--card); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.msg.ai .markdown p:first-child { margin-top: 0; }
+.msg.ai .markdown p:last-child { margin-bottom: 0; }
+.msg.ai .markdown h2:first-child { margin-top: 0; }
+.msg.ai.typing { color: var(--muted); font-size: 14px; }
+.chat-inputbar { display: flex; gap: 8px; align-items: flex-end; padding: 10px 0 8px; }
+.chat-inputbar textarea { flex: 1; min-height: 44px; max-height: 120px; }
+.send-btn { background: var(--accent); color: #06281f; border: none; border-radius: 10px; padding: 12px 18px; font-size: 15px; font-weight: 700; height: 44px; }
+.chat-clear { margin-top: 6px; }

@@ -1,0 +1,10 @@
+{
+  "name": "icucoach",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI 教练 PWA：接入 Intervals.icu，可分析可回写课表，模型可替换",
+  "engines": {
+    "node": ">=18"
+  }
+}

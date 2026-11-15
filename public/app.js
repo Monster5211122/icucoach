@@ -1,0 +1,441 @@
+// ICU AI 教练 —— 前端逻辑（零依赖）
+
+const $ = (id) => document.getElementById(id);
+
+// ---------- 通用 ----------
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.remove("hidden");
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.add("hidden"), 2600);
+}
+
+function showLoading(on) {
+  $("loading").classList.toggle("hidden", !on);
+}
+
+// ---------- 设置存取（ICU API Key 只存在本机浏览器） ----------
+const SETTINGS_KEY = "icucoach-settings";
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; }
+}
+function saveSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function requestHeaders(extra = {}) {
+  const s = loadSettings();
+  const h = { "Content-Type": "application/json", ...extra };
+  if (s.apiKey) h["x-icu-api-key"] = s.apiKey;
+  if (s.athleteId) h["x-icu-athlete-id"] = s.athleteId;
+  return h;
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: requestHeaders(opts.headers),
+  });
+  let data = null;
+  try { data = await res.json(); } catch { /* ignore */ }
+  if (!res.ok || (data && data.ok === false)) {
+    throw new Error((data && data.error) || `请求失败（${res.status}）`);
+  }
+  return data;
+}
+
+// 极简 Markdown 渲染（标题/列表/加粗/行内代码）
+function renderMarkdown(text) {
+  const esc = (s) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  let html = "";
+  const lines = String(text).split("\n");
+  let inList = false;
+  for (let line of lines) {
+    const l = line.trimEnd();
+    if (/^##\s+/.test(l)) {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<h2>${esc(l.replace(/^##\s+/, ""))}</h2>`;
+    } else if (/^###\s+/.test(l)) {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<h3>${esc(l.replace(/^###\s+/, ""))}</h3>`;
+    } else if (/^\s*[-*]\s+/.test(l)) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += `<li>${inline(l.replace(/^\s*[-*]\s+/, ""))}</li>`;
+    } else if (/^\s*\d+\.\s+/.test(l)) {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<p>${inline(l)}</p>`;
+    } else if (l.trim() === "") {
+      if (inList) { html += "</ul>"; inList = false; }
+    } else {
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<p>${inline(l)}</p>`;
+    }
+  }
+  if (inList) html += "</ul>";
+  return html;
+}
+function inline(s) {
+  return s
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+// ---------- 标签页切换 ----------
+function switchView(name) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
+  $("view-" + name).classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.view === name)
+  );
+}
+
+// ---------- 概览 ----------
+async function loadOverview() {
+  try {
+    renderOverview(await api("/api/overview"));
+  } catch (e) {
+    $("overview-hint").textContent = "加载失败：" + e.message;
+  }
+}
+
+function renderOverview(d) {
+  const f = d.fitness || {};
+  $("stat-ctl").textContent = f.ctl ?? "—";
+  $("stat-atl").textContent = f.atl ?? "—";
+  const form = f.form;
+  const formEl = $("stat-form");
+  formEl.textContent = form ?? "—";
+  formEl.className = "stat-num" + (typeof form === "number" ? (form >= 0 ? " form-pos" : " form-neg") : "");
+
+  $("stat-ftp").textContent = d.profile?.ftp ? d.profile.ftp + " W" : "—";
+  $("stat-weight").textContent = d.profile?.weight ? d.profile.weight + " kg" : "—";
+
+  const w = d.wellness && d.wellness[0];
+  $("stat-readiness").textContent = w?.readiness != null ? w.readiness + "%" : "—";
+  $("stat-rhr").textContent = w?.restingHR != null ? w.restingHR + " bpm" : "—";
+
+  const lastEl = $("stat-last");
+  if (d.last_days == null) {
+    lastEl.textContent = "—";
+  } else {
+    lastEl.textContent = d.last_days + " 天" + (d.last_days >= 2 ? "（别断练）" : "");
+  }
+
+  const errs = ["profile", "fitness", "wellness", "activities"].filter((k) => d[k + "_error"]);
+  $("overview-hint").textContent = errs.length
+    ? "部分数据获取失败：" + d[errs[0] + "_error"]
+    : "数据来自 Intervals.icu";
+
+  renderDaily(d.daily);
+}
+
+// 今日建议
+function renderDaily(daily) {
+  if (daily && daily.text) {
+    $("daily-text").innerHTML = renderMarkdown(daily.text);
+    $("daily-date").textContent = daily.date ? "（" + daily.date + "）" : "";
+    $("daily-hint").classList.add("hidden");
+  } else {
+    $("daily-text").textContent = "今日建议还没生成";
+    $("daily-hint").textContent = "正在后台生成（约十几秒），稍后点右上角「刷新」查看。";
+    $("daily-hint").classList.remove("hidden");
+    ensureDaily();
+  }
+}
+
+let dailyGenerating = false;
+async function ensureDaily() {
+  if (dailyGenerating) return;
+  dailyGenerating = true;
+  try {
+    await api("/api/daily-suggestion", { method: "POST", body: "{}" });
+    renderOverview(await api("/api/overview"));
+  } catch (e) {
+    $("daily-hint").textContent = "今日建议生成失败：" + e.message;
+    $("daily-hint").classList.remove("hidden");
+  } finally {
+    dailyGenerating = false;
+  }
+}
+
+$("btn-daily-regen").addEventListener("click", async () => {
+  showLoading(true);
+  try {
+    await api("/api/daily-suggestion", {
+      method: "POST",
+      body: JSON.stringify({ force: true }),
+    });
+    renderOverview(await api("/api/overview"));
+    toast("已重新生成今日建议");
+  } catch (e) {
+    toast("生成失败：" + e.message);
+  } finally {
+    showLoading(false);
+  }
+});
+
+// ---------- 复盘 ----------
+$("btn-analyze").addEventListener("click", async () => {
+  showLoading(true);
+  try {
+    const s = loadSettings();
+    const body = {
+      action: "analyze",
+      days: Number($("analyze-days").value),
+      focus: $("analyze-focus").value.trim() || undefined,
+      rideOnly: $("analyze-rideonly").checked,
+      persona: s.persona || undefined,
+      customPrompt: s.customPrompt || undefined,
+    };
+    const d = await api("/api/coach", { method: "POST", body: JSON.stringify(body) });
+    $("analyze-result").innerHTML = renderMarkdown(d.result);
+    $("analyze-result-card").classList.remove("hidden");
+    toast("复盘已生成");
+  } catch (e) {
+    toast("生成失败：" + e.message);
+  } finally {
+    showLoading(false);
+  }
+});
+
+// ---------- 课表 ----------
+let pendingPlan = null; // { workouts, today, selected }
+
+$("btn-plan").addEventListener("click", async () => {
+  showLoading(true);
+  try {
+    const s = loadSettings();
+    const daysValue = Number($("plan-days").value);
+    const body = {
+      action: "plan",
+      goal: $("plan-goal").value.trim() || undefined,
+      days: daysValue,
+      startDate: $("plan-start").value || undefined,
+      constraints: $("plan-constraints").value.trim() || undefined,
+      persona: s.persona || undefined,
+      customPrompt: s.customPrompt || undefined,
+    };
+    const d = await api("/api/coach", { method: "POST", body: JSON.stringify(body) });
+    pendingPlan = { workouts: d.workouts, today: daysValue === 1, selected: null };
+    $("plan-summary").innerHTML = d.summary ? renderMarkdown("**思路：** " + d.summary) : "";
+    renderPlanList();
+    $("plan-preview-card").classList.remove("hidden");
+    toast(pendingPlan.today ? "已生成 3 节可选课，请按体感选一节" : "课表已生成，请预览");
+  } catch (e) {
+    toast("生成失败：" + e.message);
+  } finally {
+    showLoading(false);
+  }
+});
+
+function renderWorkoutItem(w, i) {
+  const isRest = w.type === "Rest";
+  const today = pendingPlan && pendingPlan.today;
+  const selected = pendingPlan && pendingPlan.selected === i;
+  return `<div class="workout-item${selected ? " selected" : ""}">
+    <div class="workout-head">
+      <span class="workout-name">${escapeHtml(w.name)}</span>
+      <span class="workout-type${isRest ? " rest" : ""}">${isRest ? "休息" : "骑行"}</span>
+    </div>
+    <div class="workout-date">${w.start_date_local.slice(0, 10)}</div>
+    ${isRest ? "" : `<div class="workout-desc">${escapeHtml(w.description || "")}</div>`}
+    ${today ? `<button class="pick-btn" data-i="${i}">${selected ? "已选这节 ✓" : "选这节"}</button>` : ""}
+  </div>`;
+}
+
+function renderPlanList() {
+  if (!pendingPlan) return;
+  $("plan-list").innerHTML = pendingPlan.workouts
+    .map((w, i) => renderWorkoutItem(w, i))
+    .join("");
+  $("btn-write").disabled = pendingPlan.today && pendingPlan.selected == null;
+}
+
+$("plan-list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".pick-btn");
+  if (!btn || !pendingPlan) return;
+  pendingPlan.selected = Number(btn.dataset.i);
+  renderPlanList();
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+$("btn-write").addEventListener("click", async () => {
+  if (!pendingPlan) return;
+  let list = pendingPlan.workouts;
+  if (pendingPlan.today) {
+    if (pendingPlan.selected == null) {
+      toast("请先选一节课");
+      return;
+    }
+    list = [list[pendingPlan.selected]];
+  }
+  if (list.length === 0) return;
+  if (!confirm(`确定把这 ${list.length} 节课写回 Intervals.icu 日历吗？`)) return;
+  showLoading(true);
+  try {
+    const d = await api("/api/workouts", {
+      method: "POST",
+      body: JSON.stringify({ workouts: list }),
+    });
+    toast(`已写入 ${d.count} 节课`);
+    $("btn-write").disabled = true;
+  } catch (e) {
+    toast("写入失败：" + e.message);
+  } finally {
+    showLoading(false);
+  }
+});
+
+// ---------- 对话 ----------
+const CHAT_KEY = "icucoach-chat";
+function loadChat() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(CHAT_KEY));
+    return Array.isArray(arr)
+      ? arr.filter((m) => m && m.role && typeof m.content === "string").slice(-40)
+      : [];
+  } catch { return []; }
+}
+function saveChat() {
+  try { localStorage.setItem(CHAT_KEY, JSON.stringify(chatMessages.slice(-40))); } catch { /* ignore */ }
+}
+let chatMessages = loadChat();
+let chatSending = false;
+
+function renderChat() {
+  const wrap = $("chat-wrap");
+  $("chat-hint").style.display = chatMessages.length ? "none" : "block";
+  wrap.innerHTML = chatMessages
+    .map((m) =>
+      m.role === "user"
+        ? `<div class="msg user">${escapeHtml(m.content)}</div>`
+        : `<div class="msg ai"><div class="markdown">${renderMarkdown(m.content)}</div></div>`
+    )
+    .join("");
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+async function sendChat() {
+  if (chatSending) return;
+  const text = $("chat-input").value.trim();
+  if (!text) return;
+  chatMessages.push({ role: "user", content: text });
+  renderChat();
+  $("chat-input").value = "";
+  chatSending = true;
+  const typing = document.createElement("div");
+  typing.className = "msg ai typing";
+  typing.textContent = "教练正在思考…";
+  $("chat-wrap").appendChild(typing);
+  $("chat-wrap").scrollTop = $("chat-wrap").scrollHeight;
+  try {
+    const s = loadSettings();
+    const d = await api("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: chatMessages.slice(-20),
+        persona: s.persona || undefined,
+        customPrompt: s.customPrompt || undefined,
+      }),
+    });
+    chatMessages.push({ role: "assistant", content: d.reply });
+    saveChat();
+    renderChat();
+  } catch (e) {
+    chatMessages.push({ role: "assistant", content: "（发送失败：" + e.message + "）" });
+    renderChat();
+  } finally {
+    typing.remove();
+    chatSending = false;
+  }
+}
+
+$("btn-chat-open").addEventListener("click", () => {
+  $("chat-overlay").classList.remove("hidden");
+  renderChat();
+});
+$("btn-chat-close").addEventListener("click", () => {
+  $("chat-overlay").classList.add("hidden");
+});
+$("btn-chat-send").addEventListener("click", sendChat);
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+$("btn-chat-clear").addEventListener("click", () => {
+  if (chatMessages.length === 0 || confirm("清空当前对话？")) {
+    chatMessages = [];
+    saveChat();
+    renderChat();
+  }
+});
+
+// ---------- 设置 ----------
+function loadSettingsIntoForm() {
+  const s = loadSettings();
+  if (s.athleteId) $("set-athlete").value = s.athleteId;
+  if (s.persona) $("set-persona").value = s.persona;
+  if (s.customPrompt) $("set-custom-prompt").value = s.customPrompt;
+  $("set-apikey").placeholder = s.apiKey
+    ? "已保存（留空则不变，重新输入可更换）"
+    : "留空则用服务器配置的 Key";
+}
+$("btn-save-set").addEventListener("click", () => {
+  const s = loadSettings();
+  const k = $("set-apikey").value.trim();
+  if (k) s.apiKey = k;
+  if ($("set-athlete").value.trim()) s.athleteId = $("set-athlete").value.trim();
+  s.persona = $("set-persona").value.trim();
+  s.customPrompt = $("set-custom-prompt").value.trim();
+  saveSettings(s);
+  $("set-apikey").value = "";
+  toast("已保存");
+  loadSettingsIntoForm();
+});
+
+$("btn-prompt-enhance").addEventListener("click", async () => {
+  const seed = $("set-custom-prompt").value.trim();
+  if (!seed) {
+    toast("先在上面写几句你的想法，比如：教练严格、注重功率、多问体感");
+    return;
+  }
+  showLoading(true);
+  try {
+    const d = await api("/api/prompt-enhance", {
+      method: "POST",
+      body: JSON.stringify({ input: seed }),
+    });
+    $("set-custom-prompt").value = d.prompt;
+    toast("已生成完整提示词，可继续修改，记得点「保存」");
+  } catch (e) {
+    toast("生成失败：" + e.message);
+  } finally {
+    showLoading(false);
+  }
+});
+
+// ---------- 初始化 ----------
+document.querySelectorAll(".tab").forEach((t) =>
+  t.addEventListener("click", () => switchView(t.dataset.view))
+);
+$("btn-refresh").addEventListener("click", loadOverview);
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
+// 默认开始日期设为今天（当天可选课表模式）
+$("plan-start").value = new Date().toISOString().slice(0, 10);
+
+loadSettingsIntoForm();
+switchView("overview");
+loadOverview();
+renderChat();

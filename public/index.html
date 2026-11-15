@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AI教练" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/style.css" />
+  <title>ICU AI 教练</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-title">ICU AI 教练</div>
+    <button class="ghost-btn" id="btn-refresh" aria-label="刷新">刷新</button>
+  </header>
+
+  <main class="view" id="view-overview">
+    <section class="card">
+      <div class="daily-head">
+        <h2 class="card-title">今日建议 <span class="daily-date" id="daily-date"></span></h2>
+        <button class="ghost-btn" id="btn-daily-regen">重新生成</button>
+      </div>
+      <div class="markdown" id="daily-text">加载中…</div>
+      <div class="hint hidden" id="daily-hint"></div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">当前状态</h2>
+      <div class="grid-3" id="fitness-grid">
+        <div class="stat"><div class="stat-num" id="stat-ctl">—</div><div class="stat-label">体能 CTL</div></div>
+        <div class="stat"><div class="stat-num" id="stat-atl">—</div><div class="stat-label">疲劳 ATL</div></div>
+        <div class="stat"><div class="stat-num" id="stat-form">—</div><div class="stat-label">状态 Form</div></div>
+      </div>
+      <div class="kv">
+        <div class="kv-row"><span>FTP</span><b id="stat-ftp">—</b></div>
+        <div class="kv-row"><span>体重</span><b id="stat-weight">—</b></div>
+        <div class="kv-row"><span>Readiness</span><b id="stat-readiness">—</b></div>
+        <div class="kv-row"><span>静息心率</span><b id="stat-rhr">—</b></div>
+        <div class="kv-row"><span>距上次训练</span><b id="stat-last">—</b></div>
+      </div>
+      <div class="hint" id="overview-hint"></div>
+    </section>
+  </main>
+
+  <main class="view hidden" id="view-analyze">
+    <section class="card">
+      <h2 class="card-title">训练复盘</h2>
+      <div class="form-row">
+        <label>回看天数</label>
+        <select id="analyze-days">
+          <option value="7">最近 7 天</option>
+          <option value="14" selected>最近 14 天</option>
+          <option value="30">最近 30 天</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>重点想看</label>
+        <input id="analyze-focus" type="text" placeholder="如：为何最近状态下降" />
+      </div>
+      <div class="form-row">
+        <label class="check-row"><input id="analyze-rideonly" type="checkbox" checked /> 只看骑行（排除徒步等非骑行活动）</label>
+      </div>
+      <button class="primary-btn" id="btn-analyze">生成复盘</button>
+    </section>
+    <section class="card hidden" id="analyze-result-card">
+      <div class="markdown" id="analyze-result"></div>
+    </section>
+  </main>
+
+  <main class="view hidden" id="view-plan">
+    <section class="card">
+      <h2 class="card-title">生成课表</h2>
+      <div class="form-row">
+        <label>训练目标</label>
+        <input id="plan-goal" type="text" placeholder="如：提升 FTP，8 周后比赛" />
+      </div>
+      <div class="form-row">
+        <label>天数</label>
+        <select id="plan-days">
+          <option value="1">今天（可选课表）</option>
+          <option value="5">5 天</option>
+          <option value="7">7 天</option>
+          <option value="14">14 天</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>开始日期</label>
+        <input id="plan-start" type="date" />
+      </div>
+      <div class="form-row">
+        <label>生活约束</label>
+        <input id="plan-constraints" type="text" placeholder="如：只能晚上练，每次最多 90 分钟" />
+      </div>
+      <button class="primary-btn" id="btn-plan">生成课表</button>
+    </section>
+    <section class="card hidden" id="plan-preview-card">
+      <div class="markdown" id="plan-summary"></div>
+      <div id="plan-list"></div>
+      <button class="primary-btn" id="btn-write" disabled>写回 ICU</button>
+      <div class="hint">写回前请确认每节课内容，写回后可在 Intervals.icu 日历里看到并同步到码表。</div>
+    </section>
+  </main>
+
+  <main class="view hidden" id="view-settings">
+    <section class="card">
+      <h2 class="card-title">设置</h2>
+      <div class="form-row">
+        <label>ICU API Key</label>
+        <input id="set-apikey" type="password" autocomplete="off" placeholder="留空则用服务器配置的 Key" />
+        <div class="hint">在 Intervals.icu → Settings → Developer/API 生成。仅保存在你这台设备的浏览器里。</div>
+      </div>
+      <div class="form-row">
+        <label>运动员 ID</label>
+        <input id="set-athlete" type="number" placeholder="如 464783（留空用 API Key 所属账号）" />
+      </div>
+      <div class="form-row">
+        <label>教练人设</label>
+        <textarea id="set-persona" rows="3" placeholder="自定义教练风格，留空用默认"></textarea>
+      </div>
+      <div class="form-row">
+        <label>自定义提示词（可选）</label>
+        <textarea id="set-custom-prompt" rows="7" placeholder="粘贴你整段的 AI 提示词（人设+复盘框架+课表规则可写在一起）。填写后整体替换内置提示词和教练人设；每次运行时系统会自动把当天真实数据拼进去。"></textarea>
+        <button class="ghost-btn" id="btn-prompt-enhance" type="button">AI 自动扩展优化</button>
+        <div class="hint">写几句你的想法（如：教练严格一点、注重功率训练、多问体感），点「AI 自动扩展优化」自动扩写成完整提示词，可继续修改后再保存。</div>
+      </div>
+      <button class="primary-btn" id="btn-save-set">保存</button>
+    </section>
+    <section class="card">
+      <h2 class="card-title">关于</h2>
+      <div class="hint">
+        ICU API Key 填写后只保存在你这台设备的浏览器里，请求时直接发给自己的后端，不会上传到别处；不想填也可以只配在 Vercel 环境变量。
+        大模型密钥只存在服务器。换 AI 模型只需在 Vercel 改 <code>LLM_PROVIDER</code> 等环境变量，无需改代码。
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="overview">概览</button>
+    <button class="tab" data-view="analyze">复盘</button>
+    <button class="tab" data-view="plan">课表</button>
+    <button class="tab" data-view="settings">设置</button>
+  </nav>
+
+  <!-- 全局浮动对话 -->
+  <button class="chat-fab" id="btn-chat-open" aria-label="打开教练对话">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#06281f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  </button>
+  <div class="chat-overlay hidden" id="chat-overlay">
+    <div class="chat-top">
+      <span class="chat-title">AI 教练对话</span>
+      <button class="chat-close" id="btn-chat-close" aria-label="关闭">×</button>
+    </div>
+    <div class="chat-hint" id="chat-hint">直接问教练：今天适合练吗、我的有氧有进步吗。可以说「复盘我昨天的课」做单课深度复盘（自动标记已复盘），也可以说「帮我写一节甜区课并写入 ICU」让它直接排课。</div>
+    <div class="chat-wrap" id="chat-wrap"></div>
+    <div class="chat-inputbar">
+      <textarea id="chat-input" rows="1" placeholder="问教练点什么…"></textarea>
+      <button class="send-btn" id="btn-chat-send">发送</button>
+    </div>
+    <button class="ghost-btn chat-clear" id="btn-chat-clear">清空对话</button>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+  <div class="loading hidden" id="loading"><div class="spinner"></div></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
