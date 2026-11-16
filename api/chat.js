@@ -2,6 +2,7 @@ import { createIcuClient } from "../lib/icu.js";
 import { chatCompletionRaw } from "../lib/llm.js";
 import { coachSystem, buildChatDataBlock } from "../lib/prompts.js";
 import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review.js";
+import { appendMemory, memoryContext } from "../lib/memory.js";
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
 function getEnv(req) {
@@ -96,14 +97,33 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "remember",
+      description:
+        "把一条值得长期记住的要点写入教练记忆（用户特征、训练偏好、重要结论、伤病情况等）。只有真正值得长期记住时才调用，日常闲聊不要记。",
+      parameters: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description: "一条要点，20-100 字，不要带日期（系统会自动加日期）",
+          },
+        },
+        required: ["text"],
+      },
+    },
+  },
 ];
 
 const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
-你拥有四个工具，只在必要时调用（闲聊或一般咨询不要调用）：
+你拥有五个工具，只在必要时调用（闲聊或一般咨询不要调用）：
 - 用户要求复盘某次/某段时间的训练时：先调用 list_activities 找出还没有复盘标记的活动；
 - 用 get_activity_detail 拉取该活动的深度数据，再给出复盘；
 - 每复盘完一个活动，调用 mark_reviewed 标记它，并在回复末尾告诉用户“已标记”；
 - 用户明确要求写课表（如“把今天这节课写进 ICU”“帮我写一节甜区课”）时，调用 create_workout 写入，然后在回复里复述课表内容和日期，告诉用户已写入；
+- 遇到值得长期记住的用户特征、训练偏好、重要结论或伤病情况时，调用 remember 写入教练记忆；同样的内容不要重复记；
 - 已标记（reviewed=true）的活动可以略过或只用于趋势对比，重点复盘未标记的。`;
 
 // 工具调用循环（最多 5 轮，防止死循环）
@@ -158,6 +178,20 @@ export default async function handler(req, res) {
 
   const icu = createIcuClient(cfg.apiKey, cfg.athleteId);
 
+  // 记忆保留天数：页面设置 > 服务器环境变量 > 默认 48 天
+  const retention = Math.max(
+    1,
+    Math.min(
+      365,
+      Number(
+        req.headers["x-memory-days"] ||
+          (req.body && req.body.memoryDays) ||
+          process.env.MEMORY_DAYS ||
+          48
+      )
+    )
+  );
+
   // 工具执行器（闭包持有 icu 客户端）
   async function executeTool(name, args) {
     if (name === "list_activities") {
@@ -211,16 +245,23 @@ export default async function handler(req, res) {
         },
       };
     }
+    if (name === "remember") {
+      const text = String(args.text || "").trim().slice(0, 200);
+      if (!text) throw new Error("记忆内容不能为空");
+      await appendMemory(icu, text, retention);
+      return { ok: true, message: "已写入教练长期记忆" };
+    }
     throw new Error("未知工具: " + name);
   }
 
   try {
     // 每次对话都拉最新数据，拼进系统提示词
-    const [profile, fitness, wellness, activities] = await Promise.all([
+    const [profile, fitness, wellness, activities, memory] = await Promise.all([
       icu.profile().catch(() => null),
       icu.latestFitness().catch(() => null),
       icu.wellness(7).catch(() => []),
       icu.activities({ oldest: daysAgo(14) }).catch(() => []),
+      memoryContext(icu, retention).catch(() => ""),
     ]);
 
     const custom = (req.body && req.body.customPrompt) || "";
@@ -232,6 +273,9 @@ export default async function handler(req, res) {
       base +
       "\n\n（以下是随对话实时注入的运动员数据，回答训练问题必须基于这些数据，不要编造数字。）\n\n" +
       buildChatDataBlock({ profile, fitness, wellness, activities }) +
+      (memory
+        ? "\n\n【教练长期记忆（你此前记录过的要点，时间越近越可靠）】\n" + memory
+        : "") +
       TOOL_INSTRUCTIONS;
 
     const reply = await chatWithTools(

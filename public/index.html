@@ -126,6 +126,11 @@
         <button class="ghost-btn" id="btn-prompt-enhance" type="button">AI 自动扩展优化</button>
         <div class="hint">写几句你的想法（如：教练严格一点、注重功率训练、多问体感），点「AI 自动扩展优化」自动扩写成完整提示词，可继续修改后再保存。</div>
       </div>
+      <div class="form-row">
+        <label>教练记忆保留天数</label>
+        <input id="set-memory-days" type="number" min="7" max="365" placeholder="48" />
+        <div class="hint">教练会把复盘和对话中的重要结论记在 ICU「AI 教练记忆」便签里，超过这个天数的旧记忆自动清除。默认 48 天。</div>
+      </div>
       <button class="primary-btn" id="btn-save-set">保存</button>
     </section>
     <section class="card">

@@ -19,7 +19,11 @@ export default async function handler(req, res) {
 
   try {
     const icu = createIcuClient(process.env.ICU_API_KEY, process.env.ICU_ATHLETE_ID);
-    const daily = await generateAndStoreDaily(icu, process.env);
+    const retention = Math.max(
+      1,
+      Math.min(365, Number(process.env.MEMORY_DAYS || 48))
+    );
+    const daily = await generateAndStoreDaily(icu, process.env, retention);
     return res.status(200).json({ ok: true, daily });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e.message || e) });

@@ -1,6 +1,47 @@
 import { createIcuClient } from "../lib/icu.js";
 import { chatCompletion, parseJson } from "../lib/llm.js";
 import { buildAnalyzePrompt, buildPlanPrompt, coachSystem } from "../lib/prompts.js";
+import { appendMemory, memoryContext } from "../lib/memory.js";
+
+// 记忆保留天数：页面设置 > 服务器环境变量 > 默认 48 天
+function getRetention(req) {
+  return Math.max(
+    1,
+    Math.min(
+      365,
+      Number(
+        req.headers["x-memory-days"] ||
+          (req.body && req.body.memoryDays) ||
+          process.env.MEMORY_DAYS ||
+          48
+      )
+    )
+  );
+}
+
+// 从复盘内容里提取值得长期记住的要点（0-2 条）
+async function extractMemoryEntries(reviewText, env) {
+  const content = await chatCompletion(
+    [
+      {
+        role: "system",
+        content: `你是教练的记忆整理助手。从下面的骑行训练复盘中提取 0-2 条值得长期记住的要点（用户特征、训练偏好、重要结论、伤病情况等）。要求：
+- 每条 15-40 字，是“将来有用的结论”，不要复述当天数据本身；
+- 与训练无关的客套话、通用建议不要提取；
+- 没有值得记的就返回空数组；
+- 只输出 JSON：{"entries":["要点1","要点2"]}`,
+      },
+      { role: "user", content: reviewText.slice(0, 6000) },
+    ],
+    env,
+    { json: true }
+  );
+  const parsed = parseJson(content);
+  return (Array.isArray(parsed.entries) ? parsed.entries : [])
+    .filter((t) => typeof t === "string" && t.trim().length >= 6)
+    .map((t) => t.trim().slice(0, 100))
+    .slice(0, 2);
+}
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
 function getEnv(req) {
@@ -55,17 +96,24 @@ export default async function handler(req, res) {
 
     if (action === "analyze") {
       const { days = 14, focus, rideOnly = true } = req.body;
-      let activities = await icu
-        .activities({ oldest: daysAgo(days) })
-        .catch(() => []);
+      const retention = getRetention(req);
+      const [activitiesRaw, memory] = await Promise.all([
+        icu.activities({ oldest: daysAgo(days) }).catch(() => []),
+        memoryContext(icu, retention).catch(() => ""),
+      ]);
       // 只看骑行：排除徒步等非骑行活动，避免其 TSS 污染负荷判断
+      let activities = activitiesRaw;
       if (rideOnly) {
         activities = activities.filter((a) => /ride/i.test(a.type || ""));
       }
-      const prompt = buildAnalyzePrompt(
+      let prompt = buildAnalyzePrompt(
         { profile, fitness, wellness, activities, focus },
         custom
       );
+      if (memory) {
+        prompt +=
+          "\n\n【教练长期记忆（你此前记录过的要点，时间越近越可靠）】\n" + memory;
+      }
       const content = await chatCompletion(
         [
           { role: "system", content: systemContent },
@@ -73,7 +121,16 @@ export default async function handler(req, res) {
         ],
         process.env
       );
-      return res.status(200).json({ ok: true, result: content });
+
+      // 复盘后自动提取要点写入长期记忆（失败不影响复盘结果）
+      let memError = null;
+      try {
+        const entries = await extractMemoryEntries(content, process.env);
+        for (const t of entries) await appendMemory(icu, t, retention);
+      } catch (e) {
+        memError = String(e.message || e);
+      }
+      return res.status(200).json({ ok: true, result: content, memError });
     }
 
     // action === "plan"

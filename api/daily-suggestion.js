@@ -26,6 +26,16 @@ export default async function handler(req, res) {
 
   const icu = createIcuClient(cfg.apiKey, cfg.athleteId);
   const force = !!(req.body && req.body.force);
+  // 记忆保留天数：页面设置 > 环境变量 > 默认 48
+  const retention = Math.max(
+    1,
+    Math.min(
+      365,
+      Number(
+        req.headers["x-memory-days"] || process.env.MEMORY_DAYS || 48
+      )
+    )
+  );
 
   try {
     if (!force) {
@@ -34,7 +44,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, daily: existing, generated: false });
       }
     }
-    const daily = await generateAndStoreDaily(icu, process.env);
+    const daily = await generateAndStoreDaily(icu, process.env, retention);
     return res.status(200).json({ ok: true, daily, generated: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e.message || e) });

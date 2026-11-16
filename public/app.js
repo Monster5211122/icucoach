@@ -29,6 +29,7 @@ function requestHeaders(extra = {}) {
   const h = { "Content-Type": "application/json", ...extra };
   if (s.apiKey) h["x-icu-api-key"] = s.apiKey;
   if (s.athleteId) h["x-icu-athlete-id"] = s.athleteId;
+  if (s.memoryDays) h["x-memory-days"] = String(s.memoryDays);
   return h;
 }
 
@@ -189,6 +190,7 @@ $("btn-analyze").addEventListener("click", async () => {
       rideOnly: $("analyze-rideonly").checked,
       persona: s.persona || undefined,
       customPrompt: s.customPrompt || undefined,
+      memoryDays: s.memoryDays || undefined,
     };
     const d = await api("/api/coach", { method: "POST", body: JSON.stringify(body) });
     $("analyze-result").innerHTML = renderMarkdown(d.result);
@@ -342,6 +344,7 @@ async function sendChat() {
         messages: chatMessages.slice(-20),
         persona: s.persona || undefined,
         customPrompt: s.customPrompt || undefined,
+        memoryDays: s.memoryDays || undefined,
       }),
     });
     chatMessages.push({ role: "assistant", content: d.reply });
@@ -384,6 +387,7 @@ function loadSettingsIntoForm() {
   if (s.athleteId) $("set-athlete").value = s.athleteId;
   if (s.persona) $("set-persona").value = s.persona;
   if (s.customPrompt) $("set-custom-prompt").value = s.customPrompt;
+  if (s.memoryDays) $("set-memory-days").value = s.memoryDays;
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
     : "留空则用服务器配置的 Key";
@@ -395,6 +399,8 @@ $("btn-save-set").addEventListener("click", () => {
   if ($("set-athlete").value.trim()) s.athleteId = $("set-athlete").value.trim();
   s.persona = $("set-persona").value.trim();
   s.customPrompt = $("set-custom-prompt").value.trim();
+  const md = Number($("set-memory-days").value);
+  if (md >= 7 && md <= 365) s.memoryDays = md;
   saveSettings(s);
   $("set-apikey").value = "";
   toast("已保存");
