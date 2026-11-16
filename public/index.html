@@ -195,14 +195,15 @@
         <div class="hint">选好服务商后这里会列出常用模型；留空则用该服务商的默认模型。火山方舟需手动填你自己的「推理接入点 ID」。</div>
       </div>
       <div class="form-row">
-        <label>思考强度（DeepSeek）</label>
+        <label>思考强度
         <select id="set-thinking">
-          <option value="high">高（模型默认，稳但慢）</option>
+          <option value="high">高（建议，稳但慢）</option>
           <option value="off">关闭思考（最快最省）</option>
           <option value="low">低（快一点，思考变浅）</option>
           <option value="max">最高（最慢最贵，难题才用）</option>
+          <option value="default">跟随模型默认（不传参数）</option>
         </select>
-        <div class="hint">DeepSeek 默认就开着思考（effort=high），会多花输出 token 和几秒时间。日常复盘/课表「低」或「关闭」就够；关闭后模型直接给答案，不再写思维链。</div>
+        <div class="hint">各家支持不一样：DeepSeek 默认就开着思考（high），可开关、可选低/高/最高；火山方舟支持开关+强度；Kimi K3 系列只能调强度、关不掉；OpenAI 只有推理模型（o1/o3/gpt-5）认这个参数，gpt-4o 不传；自定义 Base URL 不传，避免报错。不支持的会静默忽略，不会让请求失败。</div>
       </div>
       <div class="form-row">
         <label>访问口令</label>
