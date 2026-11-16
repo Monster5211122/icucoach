@@ -195,6 +195,16 @@
         <div class="hint">选好服务商后这里会列出常用模型；留空则用该服务商的默认模型。火山方舟需手动填你自己的「推理接入点 ID」。</div>
       </div>
       <div class="form-row">
+        <label>思考强度（DeepSeek）</label>
+        <select id="set-thinking">
+          <option value="high">高（模型默认，稳但慢）</option>
+          <option value="off">关闭思考（最快最省）</option>
+          <option value="low">低（快一点，思考变浅）</option>
+          <option value="max">最高（最慢最贵，难题才用）</option>
+        </select>
+        <div class="hint">DeepSeek 默认就开着思考（effort=high），会多花输出 token 和几秒时间。日常复盘/课表「低」或「关闭」就够；关闭后模型直接给答案，不再写思维链。</div>
+      </div>
+      <div class="form-row">
         <label>访问口令</label>
         <div class="input-toggle">
           <input id="set-access-token" type="password" autocomplete="off" placeholder="与服务器 ACCESS_TOKEN 一致；服务器没配就不用填" />

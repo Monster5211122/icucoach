@@ -30,6 +30,10 @@ function requestHeaders(extra = {}) {
   if (s.apiKey) h["x-icu-api-key"] = s.apiKey;
   if (s.athleteId) h["x-icu-athlete-id"] = s.athleteId;
   if (s.memoryDays) h["x-memory-days"] = String(s.memoryDays);
+  if (s.llmThinking) {
+    h["x-llm-thinking"] = s.llmThinking === "off" ? "off" : "on";
+    h["x-llm-effort"] = s.llmThinking === "off" ? "" : s.llmThinking;
+  }
   // 模型配置（页面设置 > 服务器环境变量）与访问口令（防他人恶意调用）
   if (s.llmProvider) h["x-llm-provider"] = s.llmProvider;
   if (s.llmApiKey) h["x-llm-api-key"] = s.llmApiKey;
@@ -633,6 +637,8 @@ function loadSettingsIntoForm() {
   if (s.memoryDays) $("set-memory-days").value = s.memoryDays;
   if (s.llmProvider) $("set-llm-provider").value = s.llmProvider;
   if (s.llmBaseUrl) $("set-llm-base").value = s.llmBaseUrl;
+  const thinkSel = $("set-thinking");
+  if (thinkSel && s.llmThinking) thinkSel.value = s.llmThinking;
   updateModelSelect(s.llmModel || "");
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
@@ -660,6 +666,8 @@ $("btn-save-set").addEventListener("click", () => {
   if ($("set-llm-base").value.trim()) s.llmBaseUrl = $("set-llm-base").value.trim();
   const modelVal = readModelValue();
   if (modelVal) s.llmModel = modelVal;
+  const thinkSel = $("set-thinking");
+  if (thinkSel) s.llmThinking = thinkSel.value || "high";
   const at = $("set-access-token").value.trim();
   if (at) s.accessToken = at;
   saveSettings(s);
