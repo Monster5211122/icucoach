@@ -549,6 +549,25 @@ $("btn-save-set").addEventListener("click", () => {
   loadSettingsIntoForm();
 });
 
+// 载入后台内置提示词到输入框，方便查看/续写
+const btnLoadPrompt = $("btn-load-default-prompt");
+if (btnLoadPrompt) {
+  btnLoadPrompt.addEventListener("click", async () => {
+    showLoading(true);
+    try {
+      const d = await api("/api/coach?action=default_prompt");
+      if (d && d.prompt) {
+        $("set-custom-prompt").value = d.prompt;
+        toast("已载入内置提示词，可继续修改，记得点「保存」");
+      }
+    } catch (e) {
+      toast("载入失败：" + e.message);
+    } finally {
+      showLoading(false);
+    }
+  });
+}
+
 $("btn-prompt-enhance").addEventListener("click", async () => {
   const seed = $("set-custom-prompt").value.trim();
   if (!seed) {

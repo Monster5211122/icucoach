@@ -172,8 +172,9 @@
       <div class="form-row">
         <label>自定义提示词（可选）</label>
         <textarea id="set-custom-prompt" rows="7" placeholder="粘贴你整段的 AI 提示词（人设+复盘框架+课表规则可写在一起）。填写后整体替换内置提示词和教练人设；每次运行时系统会自动把当天真实数据拼进去。"></textarea>
+        <button class="ghost-btn" id="btn-load-default-prompt" type="button">载入内置提示词（查看并续写）</button>
         <button class="ghost-btn" id="btn-prompt-enhance" type="button">AI 自动扩展优化</button>
-        <div class="hint">写几句你的想法（如：教练严格一点、注重功率训练、多问体感），点「AI 自动扩展优化」自动扩写成完整提示词，可继续修改后再保存。</div>
+        <div class="hint">点「载入内置提示词」会把后台当前完整的提示词（教练人设+训练科学知识卡+铁律）拉下来填进输入框，可直接修改续写；保存后以你的版本为准，每次运行系统仍会自动拼入当天真实数据。写几句想法再点「AI 自动扩展优化」可自动扩写成完整提示词。</div>
       </div>
       <div class="form-row">
         <label>教练记忆保留天数</label>

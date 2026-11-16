@@ -66,6 +66,17 @@ function daysAgo(n) {
 }
 
 export default async function handler(req, res) {
+  // GET：设置页「载入内置提示词」用——返回后台当前完整的教练提示词，方便用户查看/续写
+  if (req.method === "GET") {
+    const authErr = authError(req);
+    if (authErr) return res.status(authErr.status).json({ ok: false, error: authErr.error });
+    const q = String(req.url || "").split("?")[1] || "";
+    if (new URLSearchParams(q).get("action") !== "default_prompt") {
+      return res.status(400).json({ ok: false, error: "action 必须是 default_prompt" });
+    }
+    return res.json({ ok: true, prompt: coachSystem() });
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "仅支持 POST" });
   }
