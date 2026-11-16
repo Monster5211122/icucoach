@@ -1,7 +1,8 @@
 import { createIcuClient } from "../lib/icu.js";
-import { chatCompletion, parseJson } from "../lib/llm.js";
+import { chatCompletion, parseJson, llmEnv } from "../lib/llm.js";
 import { buildAnalyzePrompt, buildPlanPrompt, coachSystem } from "../lib/prompts.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
+import { authError } from "../lib/auth.js";
 
 // 记忆保留天数：页面设置 > 服务器环境变量 > 默认 48 天
 function getRetention(req) {
@@ -69,6 +70,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "仅支持 POST" });
   }
 
+  const authErr = authError(req);
+  if (authErr) return res.status(authErr.status).json({ ok: false, error: authErr.error });
+
   const cfg = getEnv(req);
   if (cfg.error) return res.status(cfg.status).json({ ok: false, error: cfg.error });
 
@@ -77,6 +81,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "action 必须是 analyze 或 plan" });
   }
 
+  const llm = llmEnv(req.headers);
   const icu = createIcuClient(cfg.apiKey, cfg.athleteId);
 
   // 提示词优先级：自定义提示词（整段覆盖）> 内置人设 + 用户人设补充
@@ -119,13 +124,13 @@ export default async function handler(req, res) {
           { role: "system", content: systemContent },
           { role: "user", content: prompt },
         ],
-        process.env
+        llm
       );
 
       // 复盘后自动提取要点写入长期记忆（失败不影响复盘结果）
       let memError = null;
       try {
-        const entries = await extractMemoryEntries(content, process.env);
+        const entries = await extractMemoryEntries(content, llm);
         for (const t of entries) await appendMemory(icu, t, retention);
       } catch (e) {
         memError = String(e.message || e);
@@ -147,7 +152,7 @@ export default async function handler(req, res) {
         { role: "system", content: systemContent },
         { role: "user", content: prompt },
       ],
-      process.env,
+      llm,
       { json: true }
     );
     const plan = parseJson(content);

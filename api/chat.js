@@ -1,8 +1,9 @@
 import { createIcuClient } from "../lib/icu.js";
-import { chatCompletionRaw } from "../lib/llm.js";
+import { chatCompletionRaw, llmEnv } from "../lib/llm.js";
 import { coachSystem, buildChatDataBlock } from "../lib/prompts.js";
 import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
+import { authError } from "../lib/auth.js";
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
 function getEnv(req) {
@@ -159,6 +160,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "仅支持 POST" });
   }
 
+  const authErr = authError(req);
+  if (authErr) return res.status(authErr.status).json({ ok: false, error: authErr.error });
+
   const cfg = getEnv(req);
   if (cfg.error) return res.status(cfg.status).json({ ok: false, error: cfg.error });
 
@@ -282,7 +286,7 @@ export default async function handler(req, res) {
       [{ role: "system", content: system }, ...history],
       TOOLS,
       executeTool,
-      process.env
+      llmEnv(req.headers)
     );
     return res.status(200).json({ ok: true, reply });
   } catch (e) {

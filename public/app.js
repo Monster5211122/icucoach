@@ -30,6 +30,12 @@ function requestHeaders(extra = {}) {
   if (s.apiKey) h["x-icu-api-key"] = s.apiKey;
   if (s.athleteId) h["x-icu-athlete-id"] = s.athleteId;
   if (s.memoryDays) h["x-memory-days"] = String(s.memoryDays);
+  // 模型配置（页面设置 > 服务器环境变量）与访问口令（防他人恶意调用）
+  if (s.llmProvider) h["x-llm-provider"] = s.llmProvider;
+  if (s.llmApiKey) h["x-llm-api-key"] = s.llmApiKey;
+  if (s.llmBaseUrl) h["x-llm-base-url"] = s.llmBaseUrl;
+  if (s.llmModel) h["x-llm-model"] = s.llmModel;
+  if (s.accessToken) h["x-access-token"] = s.accessToken;
   return h;
 }
 
@@ -388,9 +394,18 @@ function loadSettingsIntoForm() {
   if (s.persona) $("set-persona").value = s.persona;
   if (s.customPrompt) $("set-custom-prompt").value = s.customPrompt;
   if (s.memoryDays) $("set-memory-days").value = s.memoryDays;
+  if (s.llmProvider) $("set-llm-provider").value = s.llmProvider;
+  if (s.llmBaseUrl) $("set-llm-base").value = s.llmBaseUrl;
+  if (s.llmModel) $("set-llm-model").value = s.llmModel;
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
     : "留空则用服务器配置的 Key";
+  $("set-llm-key").placeholder = s.llmApiKey
+    ? "已保存（留空则不变，重新输入可更换）"
+    : "留空则用服务器配置的密钥";
+  $("set-access-token").placeholder = s.accessToken
+    ? "已保存（留空则不变，重新输入可更换）"
+    : "与服务器 ACCESS_TOKEN 一致；服务器没配就不用填";
 }
 $("btn-save-set").addEventListener("click", () => {
   const s = loadSettings();
@@ -401,8 +416,18 @@ $("btn-save-set").addEventListener("click", () => {
   s.customPrompt = $("set-custom-prompt").value.trim();
   const md = Number($("set-memory-days").value);
   if (md >= 7 && md <= 365) s.memoryDays = md;
+  // 模型与访问口令（同样只存本机）
+  s.llmProvider = $("set-llm-provider").value;
+  const lk = $("set-llm-key").value.trim();
+  if (lk) s.llmApiKey = lk;
+  if ($("set-llm-base").value.trim()) s.llmBaseUrl = $("set-llm-base").value.trim();
+  if ($("set-llm-model").value.trim()) s.llmModel = $("set-llm-model").value.trim();
+  const at = $("set-access-token").value.trim();
+  if (at) s.accessToken = at;
   saveSettings(s);
   $("set-apikey").value = "";
+  $("set-llm-key").value = "";
+  $("set-access-token").value = "";
   toast("已保存");
   loadSettingsIntoForm();
 });

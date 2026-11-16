@@ -117,6 +117,35 @@
         <input id="set-athlete" type="number" placeholder="如 464783（留空用 API Key 所属账号）" />
       </div>
       <div class="form-row">
+        <label>AI 模型服务商</label>
+        <select id="set-llm-provider">
+          <option value="">跟随服务器（默认）</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="volcano">火山方舟（豆包）</option>
+          <option value="openai">OpenAI</option>
+          <option value="moonshot">Kimi（Moonshot）</option>
+          <option value="custom">自定义（OpenAI 兼容）</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>模型 API Key</label>
+        <input id="set-llm-key" type="password" autocomplete="off" placeholder="留空则用服务器配置的密钥" />
+        <div class="hint">只保存在本机浏览器，不会上传到别处。选「跟随服务器」时不必填。</div>
+      </div>
+      <div class="form-row">
+        <label>Base URL（可选）</label>
+        <input id="set-llm-base" type="text" placeholder="custom/火山需填，如 https://ark.cn-beijing.volces.com/api/v3" />
+      </div>
+      <div class="form-row">
+        <label>模型名（可选）</label>
+        <input id="set-llm-model" type="text" placeholder="如 deepseek-chat；火山填推理接入点 ID" />
+      </div>
+      <div class="form-row">
+        <label>访问口令</label>
+        <input id="set-access-token" type="password" autocomplete="off" placeholder="与服务器 ACCESS_TOKEN 一致；服务器没配就不用填" />
+        <div class="hint">防止陌生人打开你的网页调用后端烧模型额度。服务器配了 ACCESS_TOKEN 时，这里必须填同样的口令。</div>
+      </div>
+      <div class="form-row">
         <label>教练人设</label>
         <textarea id="set-persona" rows="3" placeholder="自定义教练风格，留空用默认"></textarea>
       </div>
@@ -136,8 +165,8 @@
     <section class="card">
       <h2 class="card-title">关于</h2>
       <div class="hint">
-        ICU API Key 填写后只保存在你这台设备的浏览器里，请求时直接发给自己的后端，不会上传到别处；不想填也可以只配在 Vercel 环境变量。
-        大模型密钥只存在服务器。换 AI 模型只需在 Vercel 改 <code>LLM_PROVIDER</code> 等环境变量，无需改代码。
+        ICU Key 和模型密钥都可以只填在本页，保存在你这台设备的浏览器里，请求时直接发给自己的后端，不会上传到别处；不想填也可以只配在 Vercel 环境变量。
+        服务器配了 <code>ACCESS_TOKEN</code> 后，本页「访问口令」必须填一样的值才能用——防止陌生人打开你的网页白嫖模型额度。
       </div>
     </section>
   </main>

@@ -1,4 +1,5 @@
-import { chatCompletion } from "../lib/llm.js";
+import { chatCompletion, llmEnv } from "../lib/llm.js";
+import { authError } from "../lib/auth.js";
 
 const SYSTEM = `你是一位提示词工程专家，擅长把简短的想法扩展成高质量、可直接使用的 AI 系统提示词。
 
@@ -21,6 +22,8 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "仅支持 POST" });
   }
+  const authErr = authError(req);
+  if (authErr) return res.status(authErr.status).json({ ok: false, error: authErr.error });
   const { input } = req.body || {};
   if (!input || typeof input !== "string" || input.trim().length < 4) {
     return res
@@ -34,7 +37,7 @@ export default async function handler(req, res) {
         { role: "system", content: SYSTEM },
         { role: "user", content: "我的想法是：\n" + input.trim() },
       ],
-      process.env
+      llmEnv(req.headers)
     );
     return res.status(200).json({ ok: true, prompt });
   } catch (e) {

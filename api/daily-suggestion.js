@@ -1,5 +1,7 @@
 import { createIcuClient } from "../lib/icu.js";
 import { getTodayDaily, generateAndStoreDaily } from "../lib/daily.js";
+import { llmEnv } from "../lib/llm.js";
+import { authError } from "../lib/auth.js";
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
 function getEnv(req) {
@@ -21,6 +23,8 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "仅支持 POST" });
   }
+  const authErr = authError(req);
+  if (authErr) return res.status(authErr.status).json({ ok: false, error: authErr.error });
   const cfg = getEnv(req);
   if (cfg.error) return res.status(cfg.status).json({ ok: false, error: cfg.error });
 
@@ -44,7 +48,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, daily: existing, generated: false });
       }
     }
-    const daily = await generateAndStoreDaily(icu, process.env, retention);
+    const daily = await generateAndStoreDaily(icu, llmEnv(req.headers), retention);
     return res.status(200).json({ ok: true, daily, generated: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e.message || e) });
