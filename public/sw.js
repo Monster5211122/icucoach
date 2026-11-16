@@ -1,5 +1,5 @@
 // Service Worker：静态资源缓存优先，API 始终走网络
-const CACHE = "icucoach-v2";
+const CACHE = "icucoach-v3";
 const STATIC = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (e) => {

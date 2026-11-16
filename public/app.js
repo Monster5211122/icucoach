@@ -212,6 +212,16 @@ $("btn-analyze").addEventListener("click", async () => {
 // ---------- 课表 ----------
 let pendingPlan = null; // { workouts, today, selected }
 
+// 课表场景：骑行台(默认) / 路骑
+let planMode = "indoor";
+function setPlanMode(mode) {
+  planMode = mode;
+  $("plan-mode-indoor").classList.toggle("active", mode === "indoor");
+  $("plan-mode-outdoor").classList.toggle("active", mode === "outdoor");
+}
+$("plan-mode-indoor").addEventListener("click", () => setPlanMode("indoor"));
+$("plan-mode-outdoor").addEventListener("click", () => setPlanMode("outdoor"));
+
 $("btn-plan").addEventListener("click", async () => {
   showLoading(true);
   try {
@@ -223,6 +233,7 @@ $("btn-plan").addEventListener("click", async () => {
       days: daysValue,
       startDate: $("plan-start").value || undefined,
       constraints: $("plan-constraints").value.trim() || undefined,
+      mode: planMode,
       persona: s.persona || undefined,
       customPrompt: s.customPrompt || undefined,
     };

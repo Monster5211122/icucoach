@@ -204,11 +204,12 @@ export default async function handler(req, res) {
       const rides = acts.filter((a) => /ride/i.test(a.type || ""));
       return {
         count: rides.length,
-        activities: rides.slice(-15).map(summarizeActivity),
+        activities: rides.slice(0, 15).map(summarizeActivity),
       };
     }
     if (name === "get_activity_detail") {
-      const id = Number(args.activity_id);
+      // id 保持原样（如 i209987472），icu.js 会自动补 i 前缀；转成纯数字会 404
+      const id = String(args.activity_id ?? "").trim();
       const a = await icu.activity(id);
       let streams = null;
       try {
@@ -217,7 +218,7 @@ export default async function handler(req, res) {
       return buildDeepContext(a, streams);
     }
     if (name === "mark_reviewed") {
-      const id = Number(args.activity_id);
+      const id = String(args.activity_id ?? "").trim();
       const a = await icu.activity(id);
       const r = await markReviewed(icu, a);
       return r.changed
@@ -260,12 +261,13 @@ export default async function handler(req, res) {
 
   try {
     // 每次对话都拉最新数据，拼进系统提示词
-    const [profile, fitness, wellness, activities, memory] = await Promise.all([
+    const [profile, fitness, wellness, activities, memory, baseline] = await Promise.all([
       icu.profile().catch(() => null),
       icu.latestFitness().catch(() => null),
       icu.wellness(7).catch(() => []),
       icu.activities({ oldest: daysAgo(14) }).catch(() => []),
       memoryContext(icu, retention).catch(() => ""),
+      icu.wellnessBaseline(30).catch(() => null),
     ]);
 
     const custom = (req.body && req.body.customPrompt) || "";
@@ -276,7 +278,7 @@ export default async function handler(req, res) {
     const system =
       base +
       "\n\n（以下是随对话实时注入的运动员数据，回答训练问题必须基于这些数据，不要编造数字。）\n\n" +
-      buildChatDataBlock({ profile, fitness, wellness, activities }) +
+      buildChatDataBlock({ profile, fitness, wellness, activities, baseline }) +
       (memory
         ? "\n\n【教练长期记忆（你此前记录过的要点，时间越近越可靠）】\n" + memory
         : "") +

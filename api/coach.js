@@ -92,11 +92,12 @@ export default async function handler(req, res) {
     : coachSystem() + (persona ? "\n\n【教练人设补充（用户自定义）】\n" + persona : "");
 
   try {
-    // 读取公共上下文（profile + fitness + wellness）
-    const [profile, fitness, wellness] = await Promise.all([
+    // 读取公共上下文（profile + fitness + wellness + 恢复基线）
+    const [profile, fitness, wellness, baseline] = await Promise.all([
       icu.profile().catch(() => null),
       icu.latestFitness().catch(() => null),
       icu.wellness(14).catch(() => []),
+      icu.wellnessBaseline(30).catch(() => null),
     ]);
 
     if (action === "analyze") {
@@ -111,8 +112,21 @@ export default async function handler(req, res) {
       if (rideOnly) {
         activities = activities.filter((a) => /ride/i.test(a.type || ""));
       }
+      // 给最近 5 次骑行拉单课详情（NP/EF/VI/心率漂移等只存在于详情接口），让分析有据可依
+      const recent = activities.slice(0, 5);
+      const enriched = await Promise.all(
+        recent.map(async (a) => {
+          try {
+            const d = await icu.activity(a.id);
+            return { ...a, ...d };
+          } catch (e) {
+            return a;
+          }
+        })
+      );
+      activities = enriched.concat(activities.slice(5));
       let prompt = buildAnalyzePrompt(
-        { profile, fitness, wellness, activities, focus },
+        { profile, fitness, wellness, baseline, activities, focus },
         custom
       );
       if (memory) {
@@ -139,12 +153,12 @@ export default async function handler(req, res) {
     }
 
     // action === "plan"
-    const { goal, days = 7, startDate, constraints } = req.body;
+    const { goal, days = 7, startDate, constraints, mode = "indoor" } = req.body;
     const start =
       startDate || new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
     const prompt = buildPlanPrompt(
-      { profile, fitness, goal, days, startDate: start, constraints },
+      { profile, fitness, wellness, baseline, goal, days, startDate: start, constraints, mode },
       custom
     );
     const content = await chatCompletion(

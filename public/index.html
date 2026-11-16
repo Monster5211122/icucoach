@@ -74,6 +74,14 @@
     <section class="card">
       <h2 class="card-title">生成课表</h2>
       <div class="form-row">
+        <label>训练场景</label>
+        <div class="seg">
+          <button type="button" class="seg-btn active" id="plan-mode-indoor">骑行台</button>
+          <button type="button" class="seg-btn" id="plan-mode-outdoor">路骑</button>
+        </div>
+        <div class="hint">骑行台：按 %FTP + 踏频写，可开 ERG；路骑：写平路/缓坡场景，附安全提示。</div>
+      </div>
+      <div class="form-row">
         <label>训练目标</label>
         <input id="plan-goal" type="text" placeholder="如：提升 FTP，8 周后比赛" />
       </div>
