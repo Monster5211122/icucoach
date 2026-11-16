@@ -65,9 +65,11 @@ export default async function handler(req, res) {
     const nowLocal = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const gap = Math.round((Date.parse(nowLocal) - Date.parse(lastDate)) / 86400000);
     out.last_days = Number.isFinite(gap) ? gap : null;
+    out.empty_days = Number.isFinite(gap) ? Math.max(gap - 1, 0) : null; // 真正没训练的天数
     out.last_training_date = lastDate;
   } else {
     out.last_days = null;
+    out.empty_days = null;
     out.last_training_date = null;
   }
 

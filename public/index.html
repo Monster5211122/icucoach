@@ -47,15 +47,18 @@
 
   <main class="view hidden" id="view-analyze">
     <section class="card">
-      <h2 class="card-title">单次训练复盘</h2>
+      <h2 class="card-title">单次 / 多次训练复盘</h2>
       <div class="form-row">
-        <label>选择一次训练</label>
-        <select id="single-select">
-          <option value="">（加载中，去概览页刷新一次即可）</option>
-        </select>
+        <label>勾选要复盘的训练（可多选，最多 6 节）</label>
+        <div class="pick-list" id="single-list">
+          <div class="hint">（加载中，去概览页刷新一次即可）</div>
+        </div>
       </div>
-      <button class="primary-btn" id="btn-single">生成单次复盘</button>
-      <div class="hint">选一个活动，会先展示这一课的真实结果（NP / IF / EF / VI / 心率漂移 / W' 消耗 / 分区时间），再给单课复盘和下次同类课怎么练。</div>
+      <div class="pick-actions">
+        <button class="ghost-btn" id="btn-single-clear" type="button">清空</button>
+        <button class="primary-btn" id="btn-single">生成复盘</button>
+      </div>
+      <div class="hint">勾 1 节 = 单课复盘；勾 2 节以上 = 多课复盘（会做跨课对比：VI/EF/心率漂移/同类课功率走势）。下面先展示真实结果，再给分析和下次怎么练。</div>
     </section>
     <section class="card hidden" id="single-result-card">
       <h2 class="card-title" id="single-title">训练结果</h2>

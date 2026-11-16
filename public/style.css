@@ -71,6 +71,29 @@ body {
 .kv-row span { color: var(--muted); font-size: 14px; }
 .kv-row b { font-size: 15px; }
 
+/* 多选训练列表 */
+.pick-list {
+  max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--card2); padding: 4px 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.pick-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 6px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text); line-height: 1.4;
+}
+.pick-item:last-child { border-bottom: none; }
+.pick-item input { width: 18px; height: 18px; flex: 0 0 18px; margin: 2px 0 0; accent-color: var(--accent); }
+.pick-actions { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.pick-actions .primary-btn { flex: 1; }
+.pick-actions .ghost-btn { width: auto; padding: 0 16px; }
+.stat-block { border-top: 1px solid var(--border); padding-top: 8px; }
+.stat-block-title {
+  font-size: 13px; font-weight: 700; color: var(--accent);
+  padding: 6px 2px 4px;
+}
+
 .form-row { margin-bottom: 12px; }
 .form-row label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 input, select, textarea {
@@ -135,6 +158,7 @@ textarea { resize: vertical; }
 .workout-type { font-size: 12px; padding: 2px 8px; border-radius: 20px; background: var(--accent); color: #06281f; font-weight: 700; }
 .workout-type.rest { background: var(--muted); color: #111; }
 .workout-desc { font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+.workout-reason { font-size: 12px; color: var(--text); opacity: .8; border-left: 2px solid var(--accent); padding-left: 8px; line-height: 1.5; }
 
 /* Tabbar */
 .tabbar {

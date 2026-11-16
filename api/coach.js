@@ -1,6 +1,6 @@
 import { createIcuClient } from "../lib/icu.js";
 import { chatCompletion, parseJson, llmEnv } from "../lib/llm.js";
-import { buildAnalyzePrompt, buildPlanPrompt, buildSingleAnalyzePrompt, coachSystem } from "../lib/prompts.js";
+import { buildAnalyzePrompt, buildPlanPrompt, buildSingleAnalyzePrompt, buildMultiAnalyzePrompt, coachSystem } from "../lib/prompts.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
 import { authError } from "../lib/auth.js";
 
@@ -163,24 +163,42 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, result: content, memError });
     }
 
-    // action === "analyze_single"：单次训练复盘（只针对选中的那一课）
+    // action === "analyze_single"：单课/多课复盘（activityId 或 activityIds 数组，最多 6 节）
     if (action === "analyze_single") {
-      const activityId = String((req.body && req.body.activityId) || "").trim();
-      if (!activityId) {
-        return res.status(400).json({ ok: false, error: "缺少 activityId（要复盘的活动 ID）" });
+      const rawIds = req.body && req.body.activityIds;
+      const ids = (
+        Array.isArray(rawIds) && rawIds.length
+          ? rawIds
+          : req.body && req.body.activityId
+            ? [req.body.activityId]
+            : []
+      )
+        .map((x) => String(x).trim())
+        .filter(Boolean)
+        .slice(0, 6);
+      if (!ids.length) {
+        return res.status(400).json({ ok: false, error: "缺少 activityId / activityIds（要复盘的活动 ID）" });
       }
-      let act;
-      try {
-        act = await icu.activity(activityId);
-      } catch (e) {
-        return res.status(404).json({ ok: false, error: "读不到这条活动：" + String(e.message || e) });
-      }
-      const recent = await icu.activities({ oldest: daysAgo(30) }).catch(() => []);
-      const prompt = buildSingleAnalyzePrompt(
-        { profile, fitness, wellness, baseline, activities: recent },
-        act,
-        custom
+
+      const fetched = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            return await icu.activity(id);
+          } catch (e) {
+            return null;
+          }
+        })
       );
+      const acts = fetched.filter(Boolean);
+      if (!acts.length) {
+        return res.status(404).json({ ok: false, error: "读不到这些活动，请确认 ID 是否正确" });
+      }
+
+      const prompt =
+        acts.length === 1
+          ? buildSingleAnalyzePrompt({ profile, fitness, wellness, baseline }, acts[0], custom)
+          : buildMultiAnalyzePrompt({ profile, fitness, wellness, baseline }, acts, custom);
+
       const content = await chatCompletion(
         [
           { role: "system", content: systemContent },
@@ -189,8 +207,7 @@ export default async function handler(req, res) {
         llm
       );
 
-      // 返回精简后的活动明细，供前端展示「训练结果」
-      const summary = {
+      const toSummary = (act) => ({
         id: act.id,
         name: act.name,
         date: act.start_date_local,
@@ -211,17 +228,54 @@ export default async function handler(req, res) {
         cadence: act.average_cadence ?? null,
         segments: Array.isArray(act.interval_summary) ? act.interval_summary : null,
         zones: Array.isArray(act.icu_zone_times) ? act.icu_zone_times : null,
-      };
-      return res.status(200).json({ ok: true, analysis: content, activity: summary });
+      });
+      const summaries = acts.map(toSummary);
+      return res.status(200).json({
+        ok: true,
+        analysis: content,
+        activities: summaries,
+        activity: summaries[0],
+      });
     }
 
     // action === "plan"
     const { goal, days = 7, startDate, constraints, mode = "indoor" } = req.body;
+    // 默认日期：当天可选课表用“今天”，多天计划用“明天”（均按 UTC+8）
+    const todayLocal = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const start =
-      startDate || new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      startDate ||
+      (days === 1
+        ? todayLocal
+        : new Date(Date.now() + 8 * 3600 * 1000 + 86400000).toISOString().slice(0, 10));
+
+    // 课表必须基于真实训练数据（含单课明细里的 VI/EF/掉功率等问题）
+    const actsRaw = await icu.activities({ oldest: daysAgo(21) }).catch(() => []);
+    const rides = actsRaw.filter((a) => /ride/i.test(a.type || ""));
+    const enriched = await Promise.all(
+      rides.slice(0, 3).map(async (a) => {
+        try {
+          const d = await icu.activity(a.id);
+          return { ...a, ...d };
+        } catch (e) {
+          return a;
+        }
+      })
+    );
+    const acts = enriched.concat(rides.slice(3));
 
     const prompt = buildPlanPrompt(
-      { profile, fitness, wellness, baseline, goal, days, startDate: start, constraints, mode },
+      {
+        profile,
+        fitness,
+        wellness,
+        baseline,
+        activities: acts,
+        goal,
+        days,
+        startDate: start,
+        constraints,
+        mode,
+      },
       custom
     );
     const content = await chatCompletion(
@@ -238,16 +292,24 @@ export default async function handler(req, res) {
       return res.status(502).json({ ok: false, error: "模型未返回有效课表" });
     }
 
-    // 校验每条课表字段，避免脏数据写回 ICU
-    const workouts = plan.workouts.map((w, i) => ({
-      name: String(w.name || `第${i + 1}天`).slice(0, 120),
-      type: w.type === "Rest" ? "Rest" : "Ride",
-      start_date_local: /^\d{4}-\d{2}-\d{2}/.test(w.start_date_local || "")
-        ? w.start_date_local.slice(0, 10) + "T00:00:00"
-        : null,
-      description: typeof w.description === "string" ? w.description : "",
-      moving_time: Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : null,
-    })).filter((w) => w.start_date_local);
+    // 校验每条课表字段，避免脏数据写回 ICU（日期由后端按开始日期 + 序号生成，不信模型给的年份）
+    const baseDate = Date.parse(start + "T00:00:00Z");
+    const workouts = plan.workouts
+      .map((w, i) => {
+        const dayIndex = days === 1 ? 0 : i;
+        const date = new Date(baseDate + dayIndex * 86400000).toISOString().slice(0, 10);
+        return {
+          name: String(w.name || `第${i + 1}天`).slice(0, 120),
+          type: w.type === "Rest" ? "Rest" : "Ride",
+          intensity_label:
+            typeof w.intensity_label === "string" ? w.intensity_label.slice(0, 12) : "",
+          start_date_local: date + "T00:00:00",
+          description: typeof w.description === "string" ? w.description : "",
+          reason: typeof w.reason === "string" ? w.reason.slice(0, 300) : "",
+          moving_time: Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : null,
+        };
+      })
+      .filter((w) => w.start_date_local);
 
     return res.status(200).json({
       ok: true,
