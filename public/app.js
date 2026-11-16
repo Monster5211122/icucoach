@@ -40,10 +40,24 @@ function requestHeaders(extra = {}) {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: requestHeaders(opts.headers),
-  });
+  // 90 秒超时保护：后端卡住时不再无限转圈，明确报错
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 90000);
+  let res;
+  try {
+    res = await fetch(path, {
+      ...opts,
+      headers: requestHeaders(opts.headers),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      throw new Error("请求超时（90 秒无响应），请下拉刷新后重试");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   let data = null;
   try { data = await res.json(); } catch { /* ignore */ }
   if (!res.ok || (data && data.ok === false)) {
@@ -213,14 +227,22 @@ $("btn-analyze").addEventListener("click", async () => {
 let pendingPlan = null; // { workouts, today, selected }
 
 // 课表场景：骑行台(默认) / 路骑
+// 元素不存在时静默跳过（防止旧缓存页面 + 新脚本混用时整页报错卡死）
 let planMode = "indoor";
-function setPlanMode(mode) {
-  planMode = mode;
-  $("plan-mode-indoor").classList.toggle("active", mode === "indoor");
-  $("plan-mode-outdoor").classList.toggle("active", mode === "outdoor");
+const modeIndoor = $("plan-mode-indoor");
+const modeOutdoor = $("plan-mode-outdoor");
+if (modeIndoor && modeOutdoor) {
+  modeIndoor.addEventListener("click", () => {
+    planMode = "indoor";
+    modeIndoor.classList.add("active");
+    modeOutdoor.classList.remove("active");
+  });
+  modeOutdoor.addEventListener("click", () => {
+    planMode = "outdoor";
+    modeOutdoor.classList.add("active");
+    modeIndoor.classList.remove("active");
+  });
 }
-$("plan-mode-indoor").addEventListener("click", () => setPlanMode("indoor"));
-$("plan-mode-outdoor").addEventListener("click", () => setPlanMode("outdoor"));
 
 $("btn-plan").addEventListener("click", async () => {
   showLoading(true);

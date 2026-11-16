@@ -1,5 +1,5 @@
-// Service Worker：静态资源缓存优先，API 始终走网络
-const CACHE = "icucoach-v3";
+// Service Worker：页面与脚本走网络优先（保证新版本立即生效），其余静态资源缓存优先，API 始终走网络
+const CACHE = "icucoach-v4";
 const STATIC = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
@@ -19,6 +19,24 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   // API 请求不缓存
   if (url.pathname.startsWith("/api/")) return;
+
+  // 页面和脚本：网络优先，拿不到再用缓存（避免新旧版本混用导致页面卡死）
+  if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/app.js") {
+    e.respondWith(
+      fetch(e.request)
+        .then((r) => {
+          const copy = r.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          return r;
+        })
+        .catch(() =>
+          caches.match(e.request).then((hit) => hit || caches.match("/index.html"))
+        )
+    );
+    return;
+  }
+
+  // 其它静态资源：缓存优先
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((r) => {
       const copy = r.clone();
