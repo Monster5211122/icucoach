@@ -109,12 +109,16 @@
       <h2 class="card-title">设置</h2>
       <div class="form-row">
         <label>ICU API Key</label>
-        <input id="set-apikey" type="password" autocomplete="off" placeholder="留空则用服务器配置的 Key" />
+        <div class="input-toggle">
+          <input id="set-apikey" type="password" autocomplete="off" placeholder="留空则用服务器配置的 Key" />
+          <button type="button" class="btn-eye" data-for="set-apikey" data-key="apiKey">显示</button>
+        </div>
         <div class="hint">在 Intervals.icu → Settings → Developer/API 生成。仅保存在你这台设备的浏览器里。</div>
       </div>
       <div class="form-row">
         <label>运动员 ID</label>
-        <input id="set-athlete" type="number" placeholder="如 464783（留空用 API Key 所属账号）" />
+        <input id="set-athlete" type="text" inputmode="numeric" placeholder="如 464783 或 i464783（留空用 API Key 所属账号）" />
+        <div class="hint">填 ICU 地址栏 /athlete/i 后面的数字即可，系统会自动补 i 前缀。</div>
       </div>
       <div class="form-row">
         <label>AI 模型服务商</label>
@@ -129,7 +133,10 @@
       </div>
       <div class="form-row">
         <label>模型 API Key</label>
-        <input id="set-llm-key" type="password" autocomplete="off" placeholder="留空则用服务器配置的密钥" />
+        <div class="input-toggle">
+          <input id="set-llm-key" type="password" autocomplete="off" placeholder="留空则用服务器配置的密钥" />
+          <button type="button" class="btn-eye" data-for="set-llm-key" data-key="llmApiKey">显示</button>
+        </div>
         <div class="hint">只保存在本机浏览器，不会上传到别处。选「跟随服务器」时不必填。</div>
       </div>
       <div class="form-row">
@@ -144,7 +151,10 @@
       </div>
       <div class="form-row">
         <label>访问口令</label>
-        <input id="set-access-token" type="password" autocomplete="off" placeholder="与服务器 ACCESS_TOKEN 一致；服务器没配就不用填" />
+        <div class="input-toggle">
+          <input id="set-access-token" type="password" autocomplete="off" placeholder="与服务器 ACCESS_TOKEN 一致；服务器没配就不用填" />
+          <button type="button" class="btn-eye" data-for="set-access-token" data-key="accessToken">显示</button>
+        </div>
         <div class="hint">防止陌生人打开你的网页调用后端烧模型额度。服务器配了 ACCESS_TOKEN 时，这里必须填同样的口令。</div>
       </div>
       <div class="form-row">

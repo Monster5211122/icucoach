@@ -391,8 +391,10 @@ $("btn-chat-clear").addEventListener("click", () => {
 // 常用模型列表（下拉选择）；火山方舟的模型是用户自建「推理接入点」，无法枚举，保持手动输入
 const MODEL_OPTIONS = {
   deepseek: [
-    { v: "deepseek-chat", t: "deepseek-chat（默认）" },
-    { v: "deepseek-reasoner", t: "deepseek-reasoner（深度推理）" },
+    { v: "deepseek-flash", t: "deepseek-flash（V4.1，推荐）" },
+    { v: "deepseek-v4-pro", t: "deepseek-v4-pro（旗舰，更贵）" },
+    { v: "deepseek-chat", t: "deepseek-chat（旧名，非思考·更快）" },
+    { v: "deepseek-reasoner", t: "deepseek-reasoner（旧名，深度思考）" },
   ],
   openai: [
     { v: "gpt-4o-mini", t: "gpt-4o-mini（默认，性价比）" },
@@ -450,6 +452,23 @@ function readModelValue() {
 }
 
 $("set-llm-provider").addEventListener("change", () => updateModelSelect());
+
+// 密码框「显示/隐藏」：点显示时若框里没内容，先把本机已保存的值填进去
+document.querySelectorAll(".btn-eye").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const input = document.getElementById(btn.dataset.for);
+    const saved = loadSettings()[btn.dataset.key] || "";
+    if (input.type === "text") {
+      if (saved && input.value === saved) input.value = "";
+      input.type = "password";
+      btn.textContent = "显示";
+    } else {
+      if (!input.value && saved) input.value = saved;
+      input.type = "text";
+      btn.textContent = "隐藏";
+    }
+  });
+});
 
 // ---------- 设置 ----------
 function loadSettingsIntoForm() {
