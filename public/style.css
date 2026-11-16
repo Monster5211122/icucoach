@@ -116,6 +116,7 @@ textarea { resize: vertical; }
 
 /* 分段选择（骑行台/路骑） */
 .seg { display: flex; gap: 8px; }
+.seg-wrap { flex-wrap: wrap; }
 .seg-btn {
   flex: 1; padding: 11px 0; font-size: 15px; color: var(--muted);
   background: var(--card2); border: 1px solid var(--border); border-radius: 10px;

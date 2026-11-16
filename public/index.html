@@ -118,6 +118,24 @@
         <input id="plan-start" type="date" />
       </div>
       <div class="form-row">
+        <label>可用时段（可多选）</label>
+        <div class="seg seg-wrap" id="plan-windows">
+          <button type="button" class="seg-btn" data-w="day_am">白天上午</button>
+          <button type="button" class="seg-btn" data-w="day_pm">白天下午</button>
+          <button type="button" class="seg-btn active" data-w="night">晚上 21:30 后</button>
+        </div>
+        <div class="hint">长课与强度课优先放白天（孩子午睡 13:00-15:30 也是可用窗口）；晚上 21:30 后只留 45-60 分钟轻课——深夜高强度会把入睡往后推，第二天更累。</div>
+      </div>
+      <div class="form-row">
+        <label>单次时长上限</label>
+        <select id="plan-duration">
+          <option value="60">45-60 分钟</option>
+          <option value="90">60-90 分钟</option>
+          <option value="120">90-120 分钟（长课放开）</option>
+          <option value="0" selected>不限制（按训练目的给）</option>
+        </select>
+      </div>
+      <div class="form-row">
         <label>生活约束</label>
         <input id="plan-constraints" type="text" placeholder="如：只能晚上练，每次最多 90 分钟" />
       </div>

@@ -239,7 +239,15 @@ export default async function handler(req, res) {
     }
 
     // action === "plan"
-    const { goal, days = 7, startDate, constraints, mode = "indoor" } = req.body;
+    const {
+      goal,
+      days = 7,
+      startDate,
+      constraints,
+      mode = "indoor",
+      windows,
+      maxDuration,
+    } = req.body;
     // 默认日期：当天可选课表用“今天”，多天计划用“明天”（均按 UTC+8）
     const todayLocal = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const start =
@@ -275,6 +283,8 @@ export default async function handler(req, res) {
         startDate: start,
         constraints,
         mode,
+        windows: Array.isArray(windows) && windows.length ? windows : ["night"],
+        maxDuration: Number.isFinite(Number(maxDuration)) ? Number(maxDuration) : 0,
       },
       custom
     );

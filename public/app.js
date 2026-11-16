@@ -347,6 +347,19 @@ if (modeIndoor && modeOutdoor) {
   });
 }
 
+// 课表可用时段（多选）：白天上午 / 白天下午 / 晚上 21:30 后
+const windowsBox = $("plan-windows");
+if (windowsBox) {
+  windowsBox.querySelectorAll(".seg-btn").forEach((btn) => {
+    btn.addEventListener("click", () => btn.classList.toggle("active"));
+  });
+}
+function getPlanWindows() {
+  if (!windowsBox) return ["night"];
+  const picked = Array.from(windowsBox.querySelectorAll(".seg-btn.active")).map((b) => b.dataset.w);
+  return picked.length ? picked : ["night"];
+}
+
 $("btn-plan").addEventListener("click", async () => {
   showLoading(true);
   try {
@@ -359,6 +372,8 @@ $("btn-plan").addEventListener("click", async () => {
       startDate: $("plan-start").value || undefined,
       constraints: $("plan-constraints").value.trim() || undefined,
       mode: planMode,
+      windows: getPlanWindows(),
+      maxDuration: Number($("plan-duration") ? $("plan-duration").value : 0),
       persona: s.persona || undefined,
       customPrompt: s.customPrompt || undefined,
     };
@@ -386,7 +401,7 @@ function renderWorkoutItem(w, i) {
         isRest ? "休息" : escapeHtml(w.intensity_label || "骑行")
       }</span>
     </div>
-    <div class="workout-date">${w.start_date_local.slice(0, 10)}${w.intensity_label && !isRest ? " · " + escapeHtml(w.intensity_label) : ""}</div>
+    <div class="workout-date">${w.start_date_local.slice(0, 10)}${w.intensity_label && !isRest ? " · " + escapeHtml(w.intensity_label) : ""}${w.moving_time ? " · 约 " + Math.round(w.moving_time / 60) + " 分钟" : ""}</div>
     ${isRest ? "" : `<div class="workout-desc">${escapeHtml(w.description || "")}</div>`}
     ${w.reason ? `<div class="workout-reason">为什么：${escapeHtml(w.reason)}</div>` : ""}
     ${today ? `<button class="pick-btn" data-i="${i}">${selected ? "已选这节 ✓" : "选这节"}</button>` : ""}
