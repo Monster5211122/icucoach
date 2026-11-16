@@ -111,12 +111,38 @@ function switchView(name) {
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === name)
   );
+  if (name === "analyze") populateSingleSelect();
 }
 
 // ---------- 概览 ----------
+let overviewActivities = [];
+
+// 用概览返回的活动列表填充「单次复盘」下拉
+function populateSingleSelect() {
+  const sel = $("single-select");
+  if (!sel) return;
+  const rides = (overviewActivities || [])
+    .filter((a) => /ride/i.test(a.type || ""))
+    .slice()
+    .sort((x, y) => String(y.start_date_local || "").localeCompare(String(x.start_date_local || "")))
+    .slice(0, 15);
+  if (rides.length === 0) return;
+  sel.innerHTML = rides
+    .map((a) => {
+      const d = String(a.start_date_local || "").slice(5, 10).replace("-", "/");
+      const mins = a.moving_time ? Math.round(a.moving_time / 60) + "min" : "";
+      const tss = a.icu_training_load ? "TSS " + a.icu_training_load : "";
+      return `<option value="${a.id}">${d} ${a.name || a.type || "训练"}${mins ? " · " + mins : ""}${tss ? " · " + tss : ""}</option>`;
+    })
+    .join("");
+}
+
 async function loadOverview() {
   try {
-    renderOverview(await api("/api/overview"));
+    const d = await api("/api/overview");
+    overviewActivities = d.activities || [];
+    populateSingleSelect();
+    renderOverview(d);
   } catch (e) {
     $("overview-hint").textContent = "加载失败：" + e.message;
   }
@@ -193,6 +219,59 @@ $("btn-daily-regen").addEventListener("click", async () => {
     toast("已重新生成今日建议");
   } catch (e) {
     toast("生成失败：" + e.message);
+  } finally {
+    showLoading(false);
+  }
+});
+
+// ---------- 单次复盘 ----------
+$("btn-single").addEventListener("click", async () => {
+  const sel = $("single-select");
+  const id = (sel && sel.value) || "";
+  if (!id) {
+    toast("先选一次训练；下拉是空的话，去概览页刷新一次再回来");
+    return;
+  }
+  showLoading(true);
+  try {
+    const s = loadSettings();
+    const d = await api("/api/coach", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "analyze_single",
+        activityId: id,
+        persona: s.persona || undefined,
+        customPrompt: s.customPrompt || undefined,
+      }),
+    });
+    const a = d.activity || {};
+    $("single-title").textContent = "训练结果 · " + (a.name || "");
+    const rows = [
+      ["日期", a.date ? String(a.date).slice(0, 16).replace("T", " ") : "—"],
+      ["场景", a.trainer ? "骑行台" : "户外"],
+      ["时长 / 距离", `${a.duration_min ?? "—"} min${a.distance_km ? " / " + a.distance_km + " km" : ""}`],
+      ["TSS / IF", `${a.tss ?? "—"}${a.intensity != null ? " / " + Math.round(a.intensity) + "%" : ""}`],
+      ["NP / 平均功率", `${a.np ?? "—"} W / ${a.avg_power ?? "—"} W`],
+      ["VI / EF", `${a.vi != null ? Number(a.vi).toFixed(2) : "—"} / ${a.ef != null ? Number(a.ef).toFixed(2) : "—"}`],
+      ["平均 / 最大心率", `${a.avg_hr != null ? Math.round(a.avg_hr) : "—"} / ${a.max_hr ?? "—"} bpm`],
+      ["心率漂移", a.decoupling != null ? Number(a.decoupling).toFixed(1) + "%" : "—"],
+      ["W' 消耗", a.wbal_depletion != null ? Math.round(a.wbal_depletion) + " J" : "—"],
+      ["踏频", a.cadence != null ? Math.round(a.cadence) + " rpm" : "—"],
+    ];
+    let zoneRow = "";
+    if (Array.isArray(a.zones) && a.zones.length) {
+      zoneRow =
+        `<div class="kv-row"><span>功率分区时间</span><b>` +
+        a.zones.map((z) => `${z.id} ${Math.round((z.secs || 0) / 60)}min`).join("　") +
+        `</b></div>`;
+    }
+    $("single-stats").innerHTML =
+      rows.map(([k, v]) => `<div class="kv-row"><span>${k}</span><b>${v}</b></div>`).join("") + zoneRow;
+    $("single-result").innerHTML = renderMarkdown(d.analysis || "");
+    $("single-result-card").classList.remove("hidden");
+    toast("单次复盘完成");
+  } catch (e) {
+    toast("复盘失败：" + e.message);
   } finally {
     showLoading(false);
   }

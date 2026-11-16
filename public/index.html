@@ -47,6 +47,22 @@
 
   <main class="view hidden" id="view-analyze">
     <section class="card">
+      <h2 class="card-title">单次训练复盘</h2>
+      <div class="form-row">
+        <label>选择一次训练</label>
+        <select id="single-select">
+          <option value="">（加载中，去概览页刷新一次即可）</option>
+        </select>
+      </div>
+      <button class="primary-btn" id="btn-single">生成单次复盘</button>
+      <div class="hint">选一个活动，会先展示这一课的真实结果（NP / IF / EF / VI / 心率漂移 / W' 消耗 / 分区时间），再给单课复盘和下次同类课怎么练。</div>
+    </section>
+    <section class="card hidden" id="single-result-card">
+      <h2 class="card-title" id="single-title">训练结果</h2>
+      <div class="kv" id="single-stats"></div>
+      <div class="markdown" id="single-result"></div>
+    </section>
+    <section class="card">
       <h2 class="card-title">训练复盘</h2>
       <div class="form-row">
         <label>回看天数</label>

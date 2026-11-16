@@ -52,13 +52,24 @@ export default async function handler(req, res) {
     })
   );
 
-  // 距上次训练天数（空窗提醒用）
+  // 距上次训练天数（空窗提醒用）：按日期差算（UTC+8），不能用小时差向下取整，
+  // 否则晚上训练在次日白天会少算一天（前天训练被当成昨天）
   const acts = Array.isArray(out.activities) ? out.activities : [];
-  const dates = acts
-    .map((a) => new Date(a.start_date_local).getTime())
-    .filter((t) => Number.isFinite(t));
-  out.last_days =
-    dates.length > 0 ? Math.floor((Date.now() - Math.max(...dates)) / 86400000) : null;
+  let lastDate = null;
+  for (const a of acts) {
+    const d = a && a.start_date_local ? String(a.start_date_local).slice(0, 10) : null;
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    if (!lastDate || d > lastDate) lastDate = d;
+  }
+  if (lastDate) {
+    const nowLocal = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const gap = Math.round((Date.parse(nowLocal) - Date.parse(lastDate)) / 86400000);
+    out.last_days = Number.isFinite(gap) ? gap : null;
+    out.last_training_date = lastDate;
+  } else {
+    out.last_days = null;
+    out.last_training_date = null;
+  }
 
   return res.status(200).json(out);
 }

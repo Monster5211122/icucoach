@@ -1,6 +1,6 @@
 import { createIcuClient } from "../lib/icu.js";
 import { chatCompletion, parseJson, llmEnv } from "../lib/llm.js";
-import { buildAnalyzePrompt, buildPlanPrompt, coachSystem } from "../lib/prompts.js";
+import { buildAnalyzePrompt, buildPlanPrompt, buildSingleAnalyzePrompt, coachSystem } from "../lib/prompts.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
 import { authError } from "../lib/auth.js";
 
@@ -88,8 +88,8 @@ export default async function handler(req, res) {
   if (cfg.error) return res.status(cfg.status).json({ ok: false, error: cfg.error });
 
   const { action } = req.body || {};
-  if (!["analyze", "plan"].includes(action)) {
-    return res.status(400).json({ ok: false, error: "action 必须是 analyze 或 plan" });
+  if (!["analyze", "plan", "analyze_single"].includes(action)) {
+    return res.status(400).json({ ok: false, error: "action 必须是 analyze / plan / analyze_single" });
   }
 
   const llm = llmEnv(req.headers);
@@ -161,6 +161,58 @@ export default async function handler(req, res) {
         memError = String(e.message || e);
       }
       return res.status(200).json({ ok: true, result: content, memError });
+    }
+
+    // action === "analyze_single"：单次训练复盘（只针对选中的那一课）
+    if (action === "analyze_single") {
+      const activityId = String((req.body && req.body.activityId) || "").trim();
+      if (!activityId) {
+        return res.status(400).json({ ok: false, error: "缺少 activityId（要复盘的活动 ID）" });
+      }
+      let act;
+      try {
+        act = await icu.activity(activityId);
+      } catch (e) {
+        return res.status(404).json({ ok: false, error: "读不到这条活动：" + String(e.message || e) });
+      }
+      const recent = await icu.activities({ oldest: daysAgo(30) }).catch(() => []);
+      const prompt = buildSingleAnalyzePrompt(
+        { profile, fitness, wellness, baseline, activities: recent },
+        act,
+        custom
+      );
+      const content = await chatCompletion(
+        [
+          { role: "system", content: systemContent },
+          { role: "user", content: prompt },
+        ],
+        llm
+      );
+
+      // 返回精简后的活动明细，供前端展示「训练结果」
+      const summary = {
+        id: act.id,
+        name: act.name,
+        date: act.start_date_local,
+        type: act.type,
+        trainer: !!act.trainer,
+        duration_min: act.moving_time ? Math.round(act.moving_time / 60) : null,
+        distance_km: act.icu_distance ? Math.round(act.icu_distance / 10) / 100 : null,
+        tss: act.icu_training_load ?? null,
+        intensity: act.icu_intensity ?? null,
+        np: act.icu_weighted_avg_watts ?? null,
+        avg_power: act.icu_average_watts ?? null,
+        avg_hr: act.average_heartrate ?? null,
+        max_hr: act.max_heartrate ?? null,
+        ef: act.icu_efficiency_factor ?? null,
+        vi: act.icu_variability_index ?? null,
+        decoupling: act.decoupling ?? null,
+        wbal_depletion: act.icu_max_wbal_depletion ?? null,
+        cadence: act.average_cadence ?? null,
+        segments: Array.isArray(act.interval_summary) ? act.interval_summary : null,
+        zones: Array.isArray(act.icu_zone_times) ? act.icu_zone_times : null,
+      };
+      return res.status(200).json({ ok: true, analysis: content, activity: summary });
     }
 
     // action === "plan"
