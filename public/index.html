@@ -138,7 +138,9 @@
       </div>
       <div class="form-row">
         <label>模型名（可选）</label>
-        <input id="set-llm-model" type="text" placeholder="如 deepseek-chat；火山填推理接入点 ID" />
+        <select id="set-llm-model-select"></select>
+        <input id="set-llm-model" type="text" placeholder="手动输入模型名" />
+        <div class="hint">选好服务商后这里会列出常用模型；留空则用该服务商的默认模型。火山方舟需手动填你自己的「推理接入点 ID」。</div>
       </div>
       <div class="form-row">
         <label>访问口令</label>

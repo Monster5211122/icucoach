@@ -387,6 +387,70 @@ $("btn-chat-clear").addEventListener("click", () => {
   }
 });
 
+// ---------- 模型选择 ----------
+// 常用模型列表（下拉选择）；火山方舟的模型是用户自建「推理接入点」，无法枚举，保持手动输入
+const MODEL_OPTIONS = {
+  deepseek: [
+    { v: "deepseek-chat", t: "deepseek-chat（默认）" },
+    { v: "deepseek-reasoner", t: "deepseek-reasoner（深度推理）" },
+  ],
+  openai: [
+    { v: "gpt-4o-mini", t: "gpt-4o-mini（默认，性价比）" },
+    { v: "gpt-4o", t: "gpt-4o" },
+    { v: "gpt-4.1", t: "gpt-4.1" },
+    { v: "gpt-4.1-mini", t: "gpt-4.1-mini" },
+  ],
+  moonshot: [
+    { v: "moonshot-v1-8k", t: "moonshot-v1-8k（默认）" },
+    { v: "moonshot-v1-32k", t: "moonshot-v1-32k" },
+    { v: "moonshot-v1-128k", t: "moonshot-v1-128k" },
+    { v: "kimi-k2-0711-preview", t: "kimi-k2-0711-preview（K2）" },
+  ],
+};
+
+// 根据所选服务商刷新模型下拉框（无列表的服务商显示手动输入框）
+function updateModelSelect(saved) {
+  const provider = $("set-llm-provider").value;
+  const list = MODEL_OPTIONS[provider];
+  const sel = $("set-llm-model-select");
+  const txt = $("set-llm-model");
+  if (!list) {
+    sel.classList.add("hidden");
+    txt.classList.remove("hidden");
+    if (saved) txt.value = saved;
+    return;
+  }
+  sel.classList.remove("hidden");
+  txt.classList.add("hidden");
+  const opts = [
+    { v: "", t: "留空用默认模型" },
+    ...list,
+    { v: "__custom__", t: "手动输入其它模型名…" },
+  ];
+  sel.innerHTML = opts.map((o) => `<option value="${o.v}">${o.t}</option>`).join("");
+  if (saved && list.some((o) => o.v === saved)) {
+    sel.value = saved;
+  } else if (saved) {
+    sel.value = "__custom__";
+    txt.value = saved;
+    txt.classList.remove("hidden");
+  } else {
+    sel.value = "";
+  }
+}
+
+// 读取最终模型名（下拉值或手动输入）
+function readModelValue() {
+  const sel = $("set-llm-model-select");
+  if (!sel.classList.contains("hidden")) {
+    if (sel.value === "__custom__") return $("set-llm-model").value.trim();
+    return sel.value;
+  }
+  return $("set-llm-model").value.trim();
+}
+
+$("set-llm-provider").addEventListener("change", () => updateModelSelect());
+
 // ---------- 设置 ----------
 function loadSettingsIntoForm() {
   const s = loadSettings();
@@ -396,7 +460,7 @@ function loadSettingsIntoForm() {
   if (s.memoryDays) $("set-memory-days").value = s.memoryDays;
   if (s.llmProvider) $("set-llm-provider").value = s.llmProvider;
   if (s.llmBaseUrl) $("set-llm-base").value = s.llmBaseUrl;
-  if (s.llmModel) $("set-llm-model").value = s.llmModel;
+  updateModelSelect(s.llmModel || "");
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
     : "留空则用服务器配置的 Key";
@@ -421,7 +485,8 @@ $("btn-save-set").addEventListener("click", () => {
   const lk = $("set-llm-key").value.trim();
   if (lk) s.llmApiKey = lk;
   if ($("set-llm-base").value.trim()) s.llmBaseUrl = $("set-llm-base").value.trim();
-  if ($("set-llm-model").value.trim()) s.llmModel = $("set-llm-model").value.trim();
+  const modelVal = readModelValue();
+  if (modelVal) s.llmModel = modelVal;
   const at = $("set-access-token").value.trim();
   if (at) s.accessToken = at;
   saveSettings(s);
