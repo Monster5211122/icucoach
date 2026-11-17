@@ -695,7 +695,7 @@ if (chatIgnore) {
     s.ignoreTime = chatIgnore.checked;
     saveSettings(s);
     if (typeof syncPrefs === "function") syncPrefs();
-    toast(chatIgnore.checked ? "补强模式已开：只按短板给课" : "补强模式已关：按你的可用时段排");
+    toast(chatIgnore.checked ? "解除限制已开：只按短板给课" : "解除限制已关：按你的可用时段排");
   });
 }
 
@@ -1131,12 +1131,13 @@ function renderStatusStrip(d) {
   }
   const last = $("ss-last");
   if (last) {
-    if (d?.empty_days != null) {
+    if (d?.last_days != null) {
+      const gap = d.last_days;
       last.textContent =
-        d.empty_days === 0
+        gap === 0
           ? "今天已练"
-          : `空窗 ${d.empty_days} 天${d.empty_days >= 3 ? "（别断练）" : ""}`;
-      last.className = "ss-item" + (d.empty_days >= 3 ? " warn" : "");
+          : `上次 ${d.last_training_date || "—"} · 间隔 ${gap} 天`;
+      last.className = "ss-item" + (gap >= 3 ? " warn" : "");
     } else {
       last.textContent = "—";
     }
