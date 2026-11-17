@@ -720,7 +720,6 @@ chatWrap.addEventListener("pointerdown", (e) => {
   lpTimer = setTimeout(() => {
     hideMsgOps();
     msg.classList.add("show-ops");
-    if (navigator.vibrate) navigator.vibrate(10);
   }, 450);
 });
 chatWrap.addEventListener("pointerup", clearLp);
