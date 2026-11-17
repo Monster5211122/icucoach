@@ -405,3 +405,18 @@ body.chat-mode #chat-chips { padding: 6px 0 0; }
   color: var(--muted, #9aa4ad);
   border: 1px solid rgba(255,255,255,.18);
 }
+
+/* 全局按压反馈：点下去必须有反应（缩放 + 提亮 + 轻微阴影） */
+button, .ghost-btn, .chip, .confirm-btn, .think-btn, .msg-op, .pick, .seg-btn {
+  transition: transform .09s ease, filter .12s ease, box-shadow .12s ease;
+  touch-action: manipulation;
+  -webkit-user-select: none; user-select: none;
+}
+button:active, .ghost-btn:active, .chip:active, .confirm-btn:active,
+.think-btn:active, .msg-op:active, .pick:active, .seg-btn:active {
+  transform: scale(.955);
+  filter: brightness(1.22);
+  box-shadow: 0 0 0 2px rgba(45,212,191,.25);
+}
+button:disabled, .chip:disabled { filter: none; transform: none; box-shadow: none; }
+.ghost-btn.busy { opacity: .75; }

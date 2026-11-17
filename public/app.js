@@ -169,12 +169,14 @@ async function loadOverview(retry = 1) {
     overviewActivities = d.activities || [];
     populateSingleSelect();
     renderOverview(d);
+    return true;
   } catch (e) {
     // ICU 偶发 429/超时就再试一次，别把状态条刷成一排横线
     if (retry > 0) return loadOverview(retry - 1);
     toast("数据加载失败：" + e.message + "（点右上「刷新」重试）");
     const hint = $("overview-hint");
     if (hint) hint.textContent = "加载失败：" + e.message;
+    return false;
   }
 }
 
@@ -584,7 +586,8 @@ document.addEventListener("click", (e) => {
 
 async function sendChat(presetText, reuseLastUser = false) {
   if (chatSending) return;
-  const text = (presetText != null ? presetText : $("chat-input").value).trim();
+  const raw = typeof presetText === "string" ? presetText : $("chat-input").value;
+  const text = String(raw || "").trim();
   if (!text) return;
   if (!reuseLastUser) chatMessages.push({ role: "user", content: text });
   renderChat();
@@ -912,7 +915,7 @@ api("/api/coach?action=llm_info")
   .catch(() => {})
   .then(() => renderThinkButton());
 
-$("btn-chat-send").addEventListener("click", sendChat);
+$("btn-chat-send").addEventListener("click", () => sendChat());
 $("chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -1232,11 +1235,33 @@ function renderStatusStrip(d) {
 document.querySelectorAll(".tab").forEach((t) =>
   t.addEventListener("click", () => switchView(t.dataset.view))
 );
-$("btn-refresh").addEventListener("click", loadOverview);
+$("btn-refresh").addEventListener("click", async () => {
+  const btn = $("btn-refresh");
+  if (!btn || btn.dataset.busy === "1") return;
+  btn.dataset.busy = "1";
+  btn.classList.add("busy");
+  const old = btn.textContent;
+  btn.textContent = "刷新中…";
+  btn.disabled = true;
+  try {
+    const ok = await loadOverview(1);
+    toast(ok ? "已刷新到今天" : "刷新失败，看看网络或 ICU Key");
+  } finally {
+    btn.textContent = old || "刷新";
+    btn.disabled = false;
+    btn.dataset.busy = "0";
+    btn.classList.remove("busy");
+  }
+});
 $("btn-open-settings").addEventListener("click", () => switchView("settings"));
 $("btn-open-review").addEventListener("click", () => switchView("analyze"));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));
 $("btn-back-chat-2").addEventListener("click", () => switchView("chat"));
+
+document.addEventListener("pointerdown", (e) => {
+  const t = e.target.closest ? e.target.closest("button, .chip, .confirm-btn, .pick") : null;
+  if (t && !t.disabled && navigator.vibrate) navigator.vibrate(6);
+}, true);
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
