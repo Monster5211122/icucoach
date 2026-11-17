@@ -518,7 +518,7 @@ function renderChat() {
           )}</div><div class="msg-ops"><button class="msg-op" data-op="undo" data-idx="${i}">撤回</button><button class="msg-op" data-op="edit" data-idx="${i}">修改</button></div></div>`
         : m.error
         ? `<div class="msg ai error-msg"><div class="error-text">${escapeHtml(m.error)}</div><div class="confirm-row"><button class="confirm-btn" data-retry="${i}">重新发送</button><button class="confirm-btn ghost" data-reload="1">刷新页面</button></div></div>`
-        : `<div class="msg ai"><div class="markdown">${renderMarkdown(m.content)}</div>${pendingHtml(m, i)}</div>`
+        : `<div class="msg ai"><div class="markdown"${i === chatMessages.length - 1 ? ' id="stream-bubble"' : ""}>${renderMarkdown(m.content)}</div>${pendingHtml(m, i)}</div>`
     )
     .join("");
   wrap.scrollTop = wrap.scrollHeight;
@@ -598,23 +598,80 @@ async function sendChat(presetText, reuseLastUser = false) {
   $("chat-wrap").scrollTop = $("chat-wrap").scrollHeight;
   try {
     const s = loadSettings();
-    const d = await api("/api/chat", {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 120000);
+    const res = await fetch("/api/chat", {
       method: "POST",
+      headers: requestHeaders(),
+      signal: ctrl.signal,
       body: JSON.stringify({
+        stream: true,
         messages: chatMessages.slice(-14),
         persona: s.persona || undefined,
         customPrompt: s.customPrompt || undefined,
         memoryDays: s.memoryDays || undefined,
       }),
     });
-    chatMessages.push({
-      role: "assistant",
-      content: d.reply,
-      pending: Array.isArray(d.pending) && d.pending.length ? d.pending : null,
-    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok || !ct.includes("text/event-stream")) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || "HTTP " + res.status);
+    }
+
+    // 流式：先建一条空气泡，边收边渲染，第一段字到了就把“正在思考”收掉
+    const mi = chatMessages.length;
+    chatMessages.push({ role: "assistant", content: "" });
+    if (typing.parentNode) typing.remove();
+    renderChat();
+    let pending = null;
+    let errMsg = "";
+    let raf = null;
+
+    const paint = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        const node = document.getElementById("stream-bubble");
+        if (node) node.innerHTML = renderMarkdown(chatMessages[mi].content || "…");
+        const wrap = $("chat-wrap");
+        if (wrap) wrap.scrollTop = wrap.scrollHeight;
+      });
+    };
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop() || "";
+      for (const part of parts) {
+        const line = part.split("\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+        if (evt.type === "delta" && evt.text) {
+          chatMessages[mi].content += evt.text;
+          paint();
+        } else if (evt.type === "done") {
+          pending = Array.isArray(evt.pending) && evt.pending.length ? evt.pending : null;
+        } else if (evt.type === "error") {
+          errMsg = evt.error || "生成失败";
+        }
+      }
+    }
+    clearTimeout(timer);
+
+    if (errMsg && !chatMessages[mi].content) throw new Error(errMsg);
+    if (errMsg) chatMessages[mi].content += "\n\n（生成中断：" + errMsg + "）";
+    if (pending) chatMessages[mi].pending = pending;
+    if (!chatMessages[mi].content) throw new Error("模型没有返回内容");
     saveChat();
     renderChat();
   } catch (e) {
+    if (e.name === "AbortError") e = new Error("请求超时（120 秒无响应）");
     chatMessages.push({
       role: "assistant",
       content: "",

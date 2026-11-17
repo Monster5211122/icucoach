@@ -1,5 +1,5 @@
 import { createIcuClient } from "../lib/icu.js";
-import { chatCompletionRaw, llmEnv, withAutoThinking } from "../lib/llm.js";
+import { chatCompletionRaw, chatCompletionStream, llmEnv, withAutoThinking } from "../lib/llm.js";
 import { coachSystem, buildChatDataBlock } from "../lib/prompts.js";
 import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
@@ -162,15 +162,15 @@ const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
 - 用户说出任何**训练约束**时必须 remember 一条（这类信息会进入课表与每日建议，不记就等于下次又要他重复一遍）：可用时段（如"白天午睡 13:00-15:30、晚上 21:30 后"）、单次时长上限、哪几天完全没空、身体问题（坐垫疼/膝痛/腰紧）、装备条件（没穿骑行裤、只有骑行台）、睡眠与工作安排；
 - 已标记（reviewed=true）的活动可以略过或只用于趋势对比，重点复盘未标记的。`;
 
-// 工具调用循环（最多 5 轮，防止死循环）
-async function chatWithTools(messages, tools, executor, env) {
+// 工具调用阶段：只跑“取数据”的轮次，最多 2 轮，且用低思考档位省时间
+// 返回 { msgs, answered }：answered 有值说明模型没调工具、已经直接答完了
+async function toolPhase(messages, tools, executor, env, maxRounds = 2) {
   const msgs = [...messages];
-  for (let round = 0; round < 5; round++) {
+  for (let round = 0; round < maxRounds; round++) {
     const msg = await chatCompletionRaw(msgs, env, { tools });
     msgs.push(msg);
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      if (!msg.content) throw new Error("模型未返回文本内容");
-      return msg.content;
+      return { msgs, answered: msg.content || "" };
     }
     for (const tc of msg.tool_calls) {
       let result;
@@ -180,14 +180,10 @@ async function chatWithTools(messages, tools, executor, env) {
       } catch (e) {
         result = { error: String(e.message || e) };
       }
-      msgs.push({
-        role: "tool",
-        tool_call_id: tc.id,
-        content: JSON.stringify(result),
-      });
+      msgs.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
     }
   }
-  throw new Error("工具调用轮次过多，已中止");
+  return { msgs, answered: "" };
 }
 
 export default async function handler(req, res) {
@@ -389,14 +385,59 @@ export default async function handler(req, res) {
     const light = lastText.length <= 12 && !heavy;
     const autoLv = heavy ? "max" : light ? "low" : "high";
 
-    const reply = await chatWithTools(
-      [{ role: "system", content: system }, ...history],
-      TOOLS,
-      executeTool,
-      withAutoThinking(llmEnv(req.headers), autoLv)
-    );
-    return res.status(200).json({ ok: true, reply, pending: staged });
+    // 只有真需要“查详情/写课表/打标记”的请求才走工具阶段，闲聊直接答，省一轮模型时间
+    const needTools =
+      /复盘|写入|标记|排课|课表|哪次|哪节|哪一天|详情|明细|具体数据|补强|记录/.test(lastText) ||
+      /那节|那次|这个活动/.test(lastText);
+    const t0 = Date.now();
+
+    const env = withAutoThinking(llmEnv(req.headers), autoLv);
+    const baseMsgs = [{ role: "system", content: system }, ...history];
+    let msgs = baseMsgs;
+    let preAnswer = "";
+    let pendingSeen = false;
+
+    // 工具阶段用低思考档，避免还没开始写就先烧掉 40 秒
+    if (needTools) {
+      const toolEnv = withAutoThinking(llmEnv(req.headers), "low");
+      const r = await toolPhase(msgs, TOOLS, executeTool, toolEnv, elapsedMs(t0) > 20000 ? 1 : 2);
+      msgs = r.msgs;
+      preAnswer = r.answered;
+      pendingSeen = staged.length > 0;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+    const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    // 心跳：每 8 秒一行注释，防止中间层把“长时间无数据”当超时
+    const hb = setInterval(() => { try { res.write(": keep-alive\n\n"); } catch { /* 连接已关就算了 */ } }, 8000);
+
+    try {
+      if (preAnswer) {
+        // 模型已经在工具阶段答完，直接吐出去，不再多花一轮
+        send({ type: "delta", text: preAnswer });
+      } else {
+        // 已经等太久就别再上高档思考，先保证这轮能落地
+        const finalEnv = elapsedMs(t0) > 25000 ? withAutoThinking(llmEnv(req.headers), "low") : env;
+        await chatCompletionStream(msgs, finalEnv, (text) => send({ type: "delta", text }));
+      }
+      send({ type: "done", pending: staged });
+    } catch (e) {
+      send({ type: "error", error: String(e.message || e) });
+    } finally {
+      clearInterval(hb);
+      res.end();
+    }
+    return;
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e.message || e) });
   }
+}
+
+function elapsedMs(t0) {
+  return Date.now() - t0;
 }
