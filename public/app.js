@@ -65,7 +65,9 @@ async function api(path, opts = {}) {
     });
   } catch (e) {
     if (e.name === "AbortError") {
-      throw new Error("请求超时（90 秒无响应），请下拉刷新后重试");
+      const err = new Error("请求超时（90 秒无响应）");
+      err.isTimeout = true;
+      throw err;
     }
     throw e;
   } finally {
@@ -514,6 +516,8 @@ function renderChat() {
         ? `<div class="msg user" data-idx="${i}"><div class="msg-body">${escapeHtml(
             m.content
           )}</div><div class="msg-ops"><button class="msg-op" data-op="undo" data-idx="${i}">撤回</button><button class="msg-op" data-op="edit" data-idx="${i}">修改</button></div></div>`
+        : m.error
+        ? `<div class="msg ai error-msg"><div class="error-text">${escapeHtml(m.error)}</div><div class="confirm-row"><button class="confirm-btn" data-retry="${i}">重新发送</button><button class="confirm-btn ghost" data-reload="1">刷新页面</button></div></div>`
         : `<div class="msg ai"><div class="markdown">${renderMarkdown(m.content)}</div>${pendingHtml(m, i)}</div>`
     )
     .join("");
@@ -560,16 +564,29 @@ async function confirmWrite(idx) {
 }
 
 document.addEventListener("click", (e) => {
-  const b = e.target.closest ? e.target.closest("[data-confirm]") : null;
+  if (!e.target.closest) return;
+  const reload = e.target.closest("[data-reload]");
+  if (reload) { location.reload(); return; }
+  const retry = e.target.closest("[data-retry]");
+  if (retry) {
+    const idx = Number(retry.dataset.retry);
+    const m2 = chatMessages[idx];
+    if (!m2 || !m2.retryText) return;
+    chatMessages.splice(idx, 1);
+    renderChat();
+    sendChat(m2.retryText, true);
+    return;
+  }
+  const b = e.target.closest("[data-confirm]");
   if (!b) return;
   confirmWrite(Number(b.dataset.confirm));
 });
 
-async function sendChat() {
+async function sendChat(presetText, reuseLastUser = false) {
   if (chatSending) return;
-  const text = $("chat-input").value.trim();
+  const text = (presetText != null ? presetText : $("chat-input").value).trim();
   if (!text) return;
-  chatMessages.push({ role: "user", content: text });
+  if (!reuseLastUser) chatMessages.push({ role: "user", content: text });
   renderChat();
   $("chat-input").value = "";
   chatSending = true;
@@ -584,7 +601,7 @@ async function sendChat() {
     const d = await api("/api/chat", {
       method: "POST",
       body: JSON.stringify({
-        messages: chatMessages.slice(-20),
+        messages: chatMessages.slice(-14),
         persona: s.persona || undefined,
         customPrompt: s.customPrompt || undefined,
         memoryDays: s.memoryDays || undefined,
@@ -598,7 +615,13 @@ async function sendChat() {
     saveChat();
     renderChat();
   } catch (e) {
-    chatMessages.push({ role: "assistant", content: "（发送失败：" + e.message + "）" });
+    chatMessages.push({
+      role: "assistant",
+      content: "",
+      error: "发送失败：" + e.message,
+      retryText: text,
+    });
+    saveChat();
     renderChat();
   } finally {
     typing.remove();

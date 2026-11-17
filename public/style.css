@@ -396,3 +396,12 @@ body.chat-mode #chat-chips { padding: 6px 0 0; }
 }
 .confirm-btn:disabled { opacity: .6; }
 .confirm-note { font-size: 12px; color: var(--muted); }
+
+/* 发送失败气泡：重试 / 刷新 */
+.error-msg { border-left: 2px solid #f87171; }
+.error-text { color: #fca5a5; font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+.confirm-btn.ghost {
+  background: transparent;
+  color: var(--muted, #9aa4ad);
+  border: 1px solid rgba(255,255,255,.18);
+}
