@@ -1258,11 +1258,6 @@ $("btn-open-review").addEventListener("click", () => switchView("analyze"));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));
 $("btn-back-chat-2").addEventListener("click", () => switchView("chat"));
 
-document.addEventListener("pointerdown", (e) => {
-  const t = e.target.closest ? e.target.closest("button, .chip, .confirm-btn, .pick") : null;
-  if (t && !t.disabled && navigator.vibrate) navigator.vibrate(6);
-}, true);
-
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
