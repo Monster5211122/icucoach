@@ -165,6 +165,7 @@ async function loadOverview() {
 }
 
 function renderOverview(d) {
+  if (typeof renderStatusStrip === "function") renderStatusStrip(d);
   const f = d.fitness || {};
   $("stat-ctl").textContent = f.ctl ?? "—";
   $("stat-atl").textContent = f.atl ?? "—";
@@ -513,6 +514,7 @@ async function sendChat() {
   renderChat();
   $("chat-input").value = "";
   chatSending = true;
+  [chipsBox, checkinBox].forEach((b) => b && b.querySelectorAll(".chip").forEach((c) => (c.disabled = true)));
   const typing = document.createElement("div");
   typing.className = "msg ai typing";
   typing.textContent = "教练正在思考…";
@@ -538,16 +540,24 @@ async function sendChat() {
   } finally {
     typing.remove();
     chatSending = false;
+    [chipsBox, checkinBox].forEach((b) => b && b.querySelectorAll(".chip").forEach((c) => (c.disabled = false)));
   }
 }
 
-$("btn-chat-open").addEventListener("click", () => {
-  $("chat-overlay").classList.remove("hidden");
-  renderChat();
+// 对话即主界面，不再需要浮层开关
+const chipsBox = $("chat-chips");
+const checkinBox = $("chat-checkin");
+[...(chipsBox ? [chipsBox] : []), ...(checkinBox ? [checkinBox] : [])].forEach((box) => {
+  box.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const say = chip.dataset.say || chip.textContent;
+      const input = $("chat-input");
+      if (input) input.value = say;
+      sendChat();
+    });
+  });
 });
-$("btn-chat-close").addEventListener("click", () => {
-  $("chat-overlay").classList.add("hidden");
-});
+
 $("btn-chat-send").addEventListener("click", sendChat);
 $("chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -739,11 +749,57 @@ $("btn-prompt-enhance").addEventListener("click", async () => {
   }
 });
 
+// ---------- 对话主界面 ----------
+function renderStatusStrip(d) {
+  const f = d?.fitness || {};
+  const setVal = (id, v, digits) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = v == null ? "—" : digits ? Number(v).toFixed(digits) : String(v);
+  };
+  setVal("ss-ctl", f.ctl, 1);
+  setVal("ss-atl", f.atl, 1);
+  setVal("ss-form", f.form, 1);
+  const week = $("ss-week");
+  if (week) {
+    const tss = d?.week_tss;
+    const days = d?.week_days;
+    week.textContent =
+      tss == null
+        ? "本周 TSS —"
+        : `本周 TSS ${tss}${days ? ` · ${days} 天` : ""}`;
+    week.className = "ss-item" + (typeof tss === "number" && tss < 120 ? " warn" : "");
+  }
+  const plan = $("ss-plan");
+  if (plan) {
+    const w = d?.today_workout;
+    plan.textContent = w && w.name
+      ? `今日：${w.name}`
+      : "今日：日历空";
+  }
+  const last = $("ss-last");
+  if (last) {
+    if (d?.empty_days != null) {
+      last.textContent =
+        d.empty_days === 0
+          ? "今天已练"
+          : `空窗 ${d.empty_days} 天${d.empty_days >= 3 ? "（别断练）" : ""}`;
+      last.className = "ss-item" + (d.empty_days >= 3 ? " warn" : "");
+    } else {
+      last.textContent = "—";
+    }
+  }
+}
+
 // ---------- 初始化 ----------
 document.querySelectorAll(".tab").forEach((t) =>
   t.addEventListener("click", () => switchView(t.dataset.view))
 );
 $("btn-refresh").addEventListener("click", loadOverview);
+$("btn-open-settings").addEventListener("click", () => switchView("settings"));
+$("btn-open-review").addEventListener("click", () => switchView("analyze"));
+$("btn-back-chat").addEventListener("click", () => switchView("chat"));
+$("btn-back-chat-2").addEventListener("click", () => switchView("chat"));
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -753,6 +809,6 @@ if ("serviceWorker" in navigator) {
 $("plan-start").value = new Date().toISOString().slice(0, 10);
 
 loadSettingsIntoForm();
-switchView("overview");
+switchView("chat");
 loadOverview();
 renderChat();

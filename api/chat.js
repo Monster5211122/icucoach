@@ -101,6 +101,38 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "create_workouts",
+      description:
+        "一次把多节课（最多 7 节）写入 Intervals.icu 日历。用户说“排这周课表”“给我排三天”并确认要写进日历时调用；先按真实数据排好再写，不要写他练不了的天数。",
+      parameters: {
+        type: "object",
+        properties: {
+          workouts: {
+            type: "array",
+            description: "要写入的课，按日期从早到晚",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "课表名，如“阈值 2x20”" },
+                type: { type: "string", enum: ["Ride", "Rest"] },
+                start_date_local: { type: "string", description: "日期 YYYY-MM-DD" },
+                description: {
+                  type: "string",
+                  description: "ICU 原生 workout 文本，如：- 12m 55% 85-95rpm\nMain set 2x\n- 20m 93%\n- 5m 50%",
+                },
+                moving_time: { type: "integer", description: "预计总秒数" },
+              },
+              required: ["name", "type", "start_date_local"],
+            },
+          },
+        },
+        required: ["workouts"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "remember",
       description:
         "把一条值得长期记住的要点写入教练记忆（用户特征、训练偏好、重要结论、伤病情况等）。只有真正值得长期记住时才调用，日常闲聊不要记。",
@@ -123,8 +155,11 @@ const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
 - 用户要求复盘某次/某段时间的训练时：先调用 list_activities 找出还没有复盘标记的活动；
 - 用 get_activity_detail 拉取该活动的深度数据，再给出复盘；
 - 每复盘完一个活动，调用 mark_reviewed 标记它，并在回复末尾告诉用户“已标记”；
+- 用户问“今天怎么练/今天练什么”时，不要只说方向：按「判决（练/降档练/不练）→ 今天这一节（热身/主段/组间/放松，每段写确切分钟数、瓦数区间、踏频）→ 体感校准（RPE 与心率红线）→ 降一档 → 停的条件 → 为什么」给，读完他能直接上台骑。
+- 用户说“排这周课表/给我排几天”时：先把每天的课排好（按上面的时段、时长、强度两端分化、灰区占比规则），再调用 create_workouts 一次写入；不要预排他练不了的天数，每周至少留 1-2 天恢复或休息。
 - 用户明确要求写课表（如“把今天这节课写进 ICU”“帮我写一节甜区课”）时，调用 create_workout 写入，然后在回复里复述课表内容和日期，告诉用户已写入；
 - 遇到值得长期记住的用户特征、训练偏好、重要结论或伤病情况时，调用 remember 写入教练记忆；同样的内容不要重复记；
+- 用户说出任何**训练约束**时必须 remember 一条（这类信息会进入课表与每日建议，不记就等于下次又要他重复一遍）：可用时段（如"白天午睡 13:00-15:30、晚上 21:30 后"）、单次时长上限、哪几天完全没空、身体问题（坐垫疼/膝痛/腰紧）、装备条件（没穿骑行裤、只有骑行台）、睡眠与工作安排；
 - 已标记（reviewed=true）的活动可以略过或只用于趋势对比，重点复盘未标记的。`;
 
 // 工具调用循环（最多 5 轮，防止死循环）
@@ -169,6 +204,17 @@ export default async function handler(req, res) {
   const { messages } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ ok: false, error: "messages 不能为空" });
+  }
+
+  // 未来 7 天日历摘要：教练排课时必须先看这里，已有的课不重复加
+  function calendarLine(evs) {
+    if (!Array.isArray(evs) || !evs.length) return "";
+    return evs
+      .filter((e) => e && e.start_date_local)
+      .sort((a, b) => String(a.start_date_local).localeCompare(String(b.start_date_local)))
+      .slice(0, 10)
+      .map((e) => `${String(e.start_date_local).slice(0, 10)} ${e.name || e.category || "训练"}`)
+      .join("\n");
   }
 
   // 只保留最近 20 条合法消息，防止超长
@@ -250,6 +296,32 @@ export default async function handler(req, res) {
         },
       };
     }
+    if (name === "create_workouts") {
+      const list = Array.isArray(args.workouts) ? args.workouts.slice(0, 7) : [];
+      if (!list.length) throw new Error("没有可写入的课");
+      const workouts = list.map((w) => {
+        const date = String(w.start_date_local || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("日期格式不对：" + w.start_date_local);
+        return {
+          name: String(w.name || "训练课").slice(0, 120),
+          type: w.type === "Rest" ? "Rest" : "Ride",
+          start_date_local: date + "T00:00:00",
+          description: typeof w.description === "string" ? w.description : "",
+          moving_time: Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : null,
+        };
+      });
+      const created = await icu.writeWorkouts(workouts);
+      return {
+        ok: true,
+        message: `已写入 ${created.length} 节课`,
+        workouts: created.map((ev) => ({
+          id: ev.id,
+          name: ev.name,
+          date: ev.start_date_local,
+          tss: ev.icu_training_load ?? null,
+        })),
+      };
+    }
     if (name === "remember") {
       const text = String(args.text || "").trim().slice(0, 200);
       if (!text) throw new Error("记忆内容不能为空");
@@ -261,13 +333,14 @@ export default async function handler(req, res) {
 
   try {
     // 每次对话都拉最新数据，拼进系统提示词
-    const [profile, fitness, wellness, activities, memory, baseline] = await Promise.all([
+    const [profile, fitness, wellness, activities, memory, baseline, events] = await Promise.all([
       icu.profile().catch(() => null),
       icu.latestFitness().catch(() => null),
       icu.wellness(7).catch(() => []),
       icu.activities({ oldest: daysAgo(14) }).catch(() => []),
       memoryContext(icu, retention).catch(() => ""),
       icu.wellnessBaseline(30).catch(() => null),
+      icu.events({ oldest: daysAgo(0), newest: daysAgo(-7) }).catch(() => []),
     ]);
 
     const custom = (req.body && req.body.customPrompt) || "";
@@ -275,10 +348,27 @@ export default async function handler(req, res) {
     const base = custom
       ? custom
       : coachSystem() + (persona ? "\n\n【教练人设补充（用户自定义）】\n" + persona : "");
+    // 他在课表页/设置里选的时段与时长上限（没选就按晚上算）
+    const W_LABEL = {
+      day_am: "白天上午（9-11 点）",
+      day_pm: "白天下午（14-16 点，孩子午睡窗口）",
+      night: "晚上 21:30 之后",
+    };
+    const winHeader = String(req.headers["x-plan-windows"] || "");
+    const wins = winHeader
+      .split(",")
+      .map((w) => w.trim())
+      .filter((w) => W_LABEL[w]);
+    const winText = (wins.length ? wins : ["night"]).map((w) => W_LABEL[w]).join(" / ");
+    const maxDur = Number(req.headers["x-plan-duration"] || 0);
+
     const system =
       base +
       "\n\n（以下是随对话实时注入的运动员数据，回答训练问题必须基于这些数据，不要编造数字。）\n\n" +
       buildChatDataBlock({ profile, fitness, wellness, activities, baseline }) +
+      `\n\n今天是 ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}（UTC+8），所有日期与空窗按这个算。` +
+      (calendarLine(events) ? `\n\n【ICU 日历上已有的安排（优先尊重，不要重复排）】\n${calendarLine(events)}` : "") +
+      `\n\n【他的可用时段】${winText}${maxDur > 0 ? `；单次最长 ${maxDur} 分钟` : ""}\n晚间按强度×时长上限排：≤60 分钟可到阈值/VO2max，60-90 分钟最高甜区（FTP 85-90%），90-120 分钟只做 Z2（≤70%），>120 分钟晚间不给。长课与强度课优先白天；晚上只留 45-60 分钟轻课。` +
       (memory
         ? "\n\n【教练长期记忆（你此前记录过的要点，时间越近越可靠）】\n" + memory
         : "") +

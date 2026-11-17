@@ -40,6 +40,7 @@ export default async function handler(req, res) {
     ["wellness", () => icu.wellness(14)],
     ["activities", () => icu.activities({ oldest: daysAgo(30) })],
     ["daily", () => getTodayDaily(icu)],
+    ["today_plan", () => icu.events({ oldest: daysAgo(0), newest: daysAgo(-2) })],
   ];
   await Promise.all(
     jobs.map(async ([key, fn]) => {
@@ -72,6 +73,36 @@ export default async function handler(req, res) {
     out.empty_days = null;
     out.last_training_date = null;
   }
+
+  // 本周（周一至今）TSS 与已练天数：用于对话首页"教练现在看到什么"
+  const nowLocalDate = new Date(Date.now() + 8 * 3600 * 1000);
+  const dow = nowLocalDate.getUTCDay(); // 0=周日
+  const sinceMonday = new Date(
+    nowLocalDate.getTime() - ((dow + 6) % 7) * 86400000
+  )
+    .toISOString()
+    .slice(0, 10);
+  const weekActs = acts.filter((a) => {
+    const d = String(a?.start_date_local || "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= sinceMonday;
+  });
+  out.week_tss = Math.round(
+    weekActs.reduce((s, a) => s + (Number(a.icu_training_load) || 0), 0)
+  );
+  out.week_days = new Set(weekActs.map((a) => String(a.start_date_local).slice(0, 10))).size;
+
+  // 今天的日历安排（有课/休息日）
+  const todayLocalDate = nowLocalDate.toISOString().slice(0, 10);
+  const evs = Array.isArray(out.today_plan) ? out.today_plan : [];
+  const todays = evs.filter(
+    (e) => String(e.start_date_local || "").slice(0, 10) === todayLocalDate
+  );
+  out.today_workout = todays.length
+    ? { name: todays[0].name || "", category: todays[0].category || "", type: todays[0].type || "" }
+    : null;
+
+  // 不对前端暴露原始事件列表（里面可能有记忆便签）
+  delete out.today_plan;
 
   return res.status(200).json(out);
 }

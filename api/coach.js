@@ -199,10 +199,14 @@ export default async function handler(req, res) {
           ? buildSingleAnalyzePrompt({ profile, fitness, wellness, baseline }, acts[0], custom)
           : buildMultiAnalyzePrompt({ profile, fitness, wellness, baseline }, acts, custom);
 
+      const memory = await memoryContext(icu, getRetention(req)).catch(() => "");
+      const singlePrompt = memory
+        ? prompt + "\n\n【教练长期记忆（他当面说过的情况，比数据更能解释主观感受）】\n" + memory
+        : prompt;
       const content = await chatCompletion(
         [
           { role: "system", content: systemContent },
-          { role: "user", content: prompt },
+          { role: "user", content: singlePrompt },
         ],
         llm
       );
@@ -257,7 +261,11 @@ export default async function handler(req, res) {
         : new Date(Date.now() + 8 * 3600 * 1000 + 86400000).toISOString().slice(0, 10));
 
     // 课表必须基于真实训练数据（含单课明细里的 VI/EF/掉功率等问题）
-    const actsRaw = await icu.activities({ oldest: daysAgo(21) }).catch(() => []);
+    const retention = getRetention(req);
+    const [actsRaw, memory] = await Promise.all([
+      icu.activities({ oldest: daysAgo(21) }).catch(() => []),
+      memoryContext(icu, retention).catch(() => ""),
+    ]);
     const rides = actsRaw.filter((a) => /ride/i.test(a.type || ""));
     const enriched = await Promise.all(
       rides.slice(0, 3).map(async (a) => {
@@ -288,10 +296,13 @@ export default async function handler(req, res) {
       },
       custom
     );
+    const planPrompt = memory
+      ? prompt + "\n\n【教练长期记忆（含他当面说过的可用时段、时长上限、身体状况，优先级高于默认假设）】\n" + memory
+      : prompt;
     const content = await chatCompletion(
       [
         { role: "system", content: systemContent },
-        { role: "user", content: prompt },
+        { role: "user", content: planPrompt },
       ],
       llm,
       { json: true }
