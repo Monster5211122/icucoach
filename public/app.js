@@ -30,6 +30,9 @@ function requestHeaders(extra = {}) {
   if (s.apiKey) h["x-icu-api-key"] = s.apiKey;
   if (s.athleteId) h["x-icu-athlete-id"] = s.athleteId;
   if (s.memoryDays) h["x-memory-days"] = String(s.memoryDays);
+  if (Array.isArray(s.planWindows) && s.planWindows.length && s.planWindows.join(",") !== "night")
+    h["x-plan-windows"] = s.planWindows.join(",");
+  if (s.planDuration != null) h["x-plan-duration"] = String(s.planDuration);
   if (s.llmThinking) {
     h["x-llm-thinking"] = s.llmThinking === "off" ? "off" : "on";
     h["x-llm-effort"] = s.llmThinking === "off" ? "" : s.llmThinking;
@@ -319,6 +322,9 @@ $("btn-analyze").addEventListener("click", async () => {
       customPrompt: s.customPrompt || undefined,
       memoryDays: s.memoryDays || undefined,
     };
+    s.planWindows = body.windows;
+    s.planDuration = body.maxDuration;
+    saveSettings(s);
     const d = await api("/api/coach", { method: "POST", body: JSON.stringify(body) });
     $("analyze-result").innerHTML = renderMarkdown(d.result);
     $("analyze-result-card").classList.remove("hidden");
@@ -358,11 +364,23 @@ if (windowsBox) {
     btn.addEventListener("click", () => btn.classList.toggle("active"));
   });
 }
+function applyPlanSettings() {
+  const s = loadSettings();
+  if (windowsBox && Array.isArray(s.planWindows) && s.planWindows.length) {
+    windowsBox.querySelectorAll(".seg-btn").forEach((b) =>
+      b.classList.toggle("active", s.planWindows.includes(b.dataset.w))
+    );
+  }
+  const durSel = $("plan-duration");
+  if (durSel && s.planDuration != null) durSel.value = String(s.planDuration);
+}
 function getPlanWindows() {
   if (!windowsBox) return ["night"];
   const picked = Array.from(windowsBox.querySelectorAll(".seg-btn.active")).map((b) => b.dataset.w);
   return picked.length ? picked : ["night"];
 }
+
+if (windowsBox) applyPlanSettings();
 
 $("btn-plan").addEventListener("click", async () => {
   showLoading(true);
@@ -668,6 +686,9 @@ $("btn-save-set").addEventListener("click", () => {
   if (modelVal) s.llmModel = modelVal;
   const thinkSel = $("set-thinking");
   if (thinkSel) s.llmThinking = thinkSel.value || "high";
+  // 课表页的可用时段/时长上限也存下来，供每日建议复用
+  if (windowsBox) s.planWindows = getPlanWindows();
+  if ($("plan-duration")) s.planDuration = Number($("plan-duration").value);
   const at = $("set-access-token").value.trim();
   if (at) s.accessToken = at;
   saveSettings(s);

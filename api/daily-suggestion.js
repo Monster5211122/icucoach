@@ -48,7 +48,16 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, daily: existing, generated: false });
       }
     }
-    const daily = await generateAndStoreDaily(icu, llmEnv(req.headers), retention);
+    const winHeader = String(req.headers["x-plan-windows"] || "");
+    const windows = winHeader
+      .split(",")
+      .map((w) => w.trim())
+      .filter((w) => ["day_am", "day_pm", "night"].includes(w));
+    const maxDurHeader = Number(req.headers["x-plan-duration"] || 0);
+    const daily = await generateAndStoreDaily(icu, llmEnv(req.headers), retention, {
+      windows: windows.length ? windows : undefined,
+      maxDuration: Number.isFinite(maxDurHeader) ? maxDurHeader : 0,
+    });
     return res.status(200).json({ ok: true, daily, generated: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e.message || e) });
