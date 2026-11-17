@@ -312,6 +312,20 @@ body.chat-mode .chat-inputbar {
   background: var(--bg);
 }
 body.chat-mode .chat-inputbar textarea { max-height: 96px; }
+
+/* 底部固定区：状态条下方这几行一律不许被压缩，否则会被输入框盖住 */
+body.chat-mode .status-strip,
+body.chat-mode .mode-row,
+body.chat-mode .chat-hint,
+body.chat-mode #chat-checkin,
+body.chat-mode #chat-chips {
+  flex: 0 0 auto;
+}
+body.chat-mode .chat-main { overflow: hidden; }
+body.chat-mode .chips { overflow-x: auto; overflow-y: hidden; align-items: center; }
+body.chat-mode #chat-checkin { margin-bottom: 0; }
+body.chat-mode .chips.checkin { padding: 4px 0 0; }
+body.chat-mode #chat-chips { padding: 6px 0 0; }
 .chip-clear { font-size: 12px; padding: 6px 10px; }
 
 /* 补强开关（对话页状态条内） */
