@@ -3,9 +3,9 @@ import { generateAndStoreDaily, getTodayDaily } from "../lib/daily.js";
 import { withAutoThinking } from "../lib/llm.js";
 import { readPrefs } from "../lib/prefs.js";
 
-// Vercel Cron：北京时间 08:00-20:00 每小时检查一次（UTC 0-12 点）
-// 只在「今天还没有建议」且「HRV 已填 或 已过 12 点」时才真正生成，
-// 其余时间直接返回，不消耗模型额度。写的是 ICU 便签，不写结构化课表。
+// Vercel Cron：北京时间每天 12:00 跑一次（UTC 04:00）
+// 免费版限制：cron 只能每天一次，所以不做「每小时等 HRV」，直接把时间放到 12:00，
+// 那时你的 HRV 一般已经填好；没填也照常生成，并在 prompt 里标注 HRV 未填。
 function beijingHour() {
   return (new Date().getUTCHours() + 8) % 24;
 }
