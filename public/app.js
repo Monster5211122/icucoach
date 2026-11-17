@@ -114,6 +114,7 @@ function inline(s) {
 
 // ---------- 标签页切换 ----------
 function switchView(name) {
+  document.body.classList.toggle("chat-mode", name === "chat");
   document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
   $("view-" + name).classList.remove("hidden");
   document.querySelectorAll(".tab").forEach((t) =>
@@ -498,9 +499,11 @@ function renderChat() {
   const wrap = $("chat-wrap");
   $("chat-hint").style.display = chatMessages.length ? "none" : "block";
   wrap.innerHTML = chatMessages
-    .map((m) =>
+    .map((m, i) =>
       m.role === "user"
-        ? `<div class="msg user">${escapeHtml(m.content)}</div>`
+        ? `<div class="msg user" data-idx="${i}"><div class="msg-body">${escapeHtml(
+            m.content
+          )}</div><div class="msg-ops"><button class="msg-op" data-op="undo" data-idx="${i}">撤回</button><button class="msg-op" data-op="edit" data-idx="${i}">修改</button></div></div>`
         : `<div class="msg ai"><div class="markdown">${renderMarkdown(m.content)}</div></div>`
     )
     .join("");
@@ -549,7 +552,7 @@ async function sendChat() {
 const chipsBox = $("chat-chips");
 const checkinBox = $("chat-checkin");
 [...(chipsBox ? [chipsBox] : []), ...(checkinBox ? [checkinBox] : [])].forEach((box) => {
-  box.querySelectorAll(".chip").forEach((chip) => {
+  box.querySelectorAll(".chip[data-say]").forEach((chip) => {
     chip.addEventListener("click", () => {
       const say = chip.dataset.say || chip.textContent;
       const input = $("chat-input");
@@ -558,6 +561,87 @@ const checkinBox = $("chat-checkin");
     });
   });
 });
+
+// 长按消息 → 显示「撤回 / 修改」；点别处收起
+let lpTimer = null;
+const clearLp = () => {
+  if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+};
+const hideMsgOps = () =>
+  document.querySelectorAll(".msg.show-ops").forEach((m) => m.classList.remove("show-ops"));
+
+const chatWrap = $("chat-wrap");
+chatWrap.addEventListener("pointerdown", (e) => {
+  const msg = e.target.closest(".msg.user");
+  if (!msg) return;
+  clearLp();
+  lpTimer = setTimeout(() => {
+    hideMsgOps();
+    msg.classList.add("show-ops");
+    if (navigator.vibrate) navigator.vibrate(10);
+  }, 450);
+});
+chatWrap.addEventListener("pointerup", clearLp);
+chatWrap.addEventListener("pointercancel", clearLp);
+chatWrap.addEventListener("pointermove", clearLp);
+chatWrap.addEventListener("scroll", clearLp);
+
+// 鼠标右键（电脑上）同样弹出「撤回 / 修改」
+chatWrap.addEventListener("contextmenu", (e) => {
+  const msg = e.target.closest(".msg.user");
+  if (!msg) return; // 非消息区域保留系统菜单（如粘贴）
+  e.preventDefault();
+  hideMsgOps();
+  msg.classList.add("show-ops");
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".msg-op")) return;
+  if (e.target.closest(".msg.show-ops")) return;
+  hideMsgOps();
+});
+
+// 撤回（删掉这条及之后的对话）与修改（放回输入框再改）
+$("chat-wrap").addEventListener("click", (e) => {
+  const btn = e.target.closest(".msg-op");
+  if (!btn || chatSending) return;
+  const idx = Number(btn.dataset.idx);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= chatMessages.length) return;
+  const text = chatMessages[idx].content;
+
+  if (btn.dataset.op === "edit") {
+    // 修改：把这条放回输入框，并把它和它之后的回复一起撤掉
+    chatMessages = chatMessages.slice(0, idx);
+    saveChat();
+    renderChat();
+    $("chat-input").value = text;
+    $("chat-input").focus();
+    toast("已放回输入框，改完再发");
+    return;
+  }
+
+  // 撤回：删掉这条及其后的所有消息
+  if (!confirm("撤回这条？它后面的对话也会一起删掉。")) return;
+  chatMessages = chatMessages.slice(0, idx);
+  saveChat();
+  hideMsgOps();
+  renderChat();
+});
+
+// 对话页的「补强」开关：切换即时生效，写入设置并作用于后续提问
+const chatIgnore = $("chat-ignore-time");
+function syncChatIgnore() {
+  if (!chatIgnore) return;
+  chatIgnore.checked = !!loadSettings().ignoreTime;
+}
+if (chatIgnore) {
+  chatIgnore.addEventListener("change", () => {
+    const s = loadSettings();
+    s.ignoreTime = chatIgnore.checked;
+    saveSettings(s);
+    toast(chatIgnore.checked ? "补强模式已开：只按短板给课" : "补强模式已关：按你的可用时段排");
+  });
+}
 
 $("btn-chat-send").addEventListener("click", sendChat);
 $("chat-input").addEventListener("keydown", (e) => {
@@ -814,6 +898,7 @@ if ("serviceWorker" in navigator) {
 $("plan-start").value = new Date().toISOString().slice(0, 10);
 
 loadSettingsIntoForm();
+syncChatIgnore();
 switchView("chat");
 loadOverview();
 renderChat();

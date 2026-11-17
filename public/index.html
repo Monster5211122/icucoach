@@ -31,10 +31,15 @@
       <span class="ss-item" id="ss-week">本周 TSS —</span>
       <span class="ss-item" id="ss-plan">今日 —</span>
       <span class="ss-item" id="ss-last">—</span>
+      <label class="ss-toggle" title="纯数据补强：忽略时段与时长，只按短板给课">
+        <input type="checkbox" id="chat-ignore-time" role="switch" />
+        <span class="ss-toggle-text">补强</span>
+      </label>
     </div>
-    <div class="chair-hint" id="chat-hint">直接说就行：今天怎么练、复盘最近那节、这周怎么排。教练会先看你的真实数据再回答。</div>
+    <div class="chat-hint" id="chat-hint">直接说就行：今天怎么练、复盘最近那节、这周怎么排。教练会先看你的真实数据再回答；长按你的消息可以撤回或修改。</div>
     <div class="chat-wrap" id="chat-wrap"></div>
     <div class="chips checkin" id="chat-checkin">
+      <button class="chip ghost chip-clear" id="btn-chat-clear">清空</button>
       <button class="chip ghost" data-say="签到：睡眠够（7 小时以上），腿不沉，压力正常。">睡够了</button>
       <button class="chip ghost" data-say="签到：昨晚没睡好（不到 6 小时，夜醒），人有点乏。">没睡好</button>
       <button class="chip ghost" data-say="签到：腿沉、发木，还没热身就觉得费劲。">腿沉</button>
@@ -51,7 +56,6 @@
       <textarea id="chat-input" rows="1" placeholder="跟教练说点什么…"></textarea>
       <button class="send-btn" id="btn-chat-send">发送</button>
     </div>
-    <button class="ghost-btn chat-clear" id="btn-chat-clear">清空对话</button>
   </main>
 
   <main class="view" id="view-overview">
