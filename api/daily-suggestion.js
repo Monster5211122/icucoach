@@ -1,6 +1,6 @@
 import { createIcuClient } from "../lib/icu.js";
 import { getTodayDaily, generateAndStoreDaily } from "../lib/daily.js";
-import { llmEnv } from "../lib/llm.js";
+import { llmEnv, withAutoThinking } from "../lib/llm.js";
 import { authError } from "../lib/auth.js";
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
@@ -54,10 +54,11 @@ export default async function handler(req, res) {
       .map((w) => w.trim())
       .filter((w) => ["day_am", "day_pm", "night"].includes(w));
     const maxDurHeader = Number(req.headers["x-plan-duration"] || 0);
-    const daily = await generateAndStoreDaily(icu, llmEnv(req.headers), retention, {
+    const daily = await generateAndStoreDaily(icu, withAutoThinking(llmEnv(req.headers), "high"), retention, {
       windows: windows.length ? windows : undefined,
       maxDuration: Number.isFinite(maxDurHeader) ? maxDurHeader : 0,
       ignoreTime: String(req.headers["x-plan-ignore-time"] || "") === "1",
+      source: "手动生成建议",
     });
     return res.status(200).json({ ok: true, daily, generated: true });
   } catch (e) {

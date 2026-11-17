@@ -35,8 +35,13 @@ function requestHeaders(extra = {}) {
   if (s.planDuration != null) h["x-plan-duration"] = String(s.planDuration);
   if (s.ignoreTime) h["x-plan-ignore-time"] = "1";
   if (s.llmThinking) {
-    h["x-llm-thinking"] = s.llmThinking === "off" ? "off" : "on";
-    h["x-llm-effort"] = s.llmThinking === "off" ? "" : s.llmThinking;
+    if (s.llmThinking === "auto") {
+      h["x-llm-thinking"] = "auto";
+      h["x-llm-effort"] = "auto";
+    } else {
+      h["x-llm-thinking"] = s.llmThinking === "off" ? "off" : "on";
+      h["x-llm-effort"] = s.llmThinking === "off" ? "" : s.llmThinking;
+    }
   }
   // 模型配置（页面设置 > 服务器环境变量）与访问口令（防他人恶意调用）
   if (s.llmProvider) h["x-llm-provider"] = s.llmProvider;
@@ -121,6 +126,7 @@ function switchView(name) {
     t.classList.toggle("active", t.dataset.view === name)
   );
   if (name === "analyze") populateSingleSelect();
+  if (name === "chat" && typeof renderThinkButton === "function") renderThinkButton();
 }
 
 // ---------- 概览 ----------
@@ -504,11 +510,56 @@ function renderChat() {
         ? `<div class="msg user" data-idx="${i}"><div class="msg-body">${escapeHtml(
             m.content
           )}</div><div class="msg-ops"><button class="msg-op" data-op="undo" data-idx="${i}">撤回</button><button class="msg-op" data-op="edit" data-idx="${i}">修改</button></div></div>`
-        : `<div class="msg ai"><div class="markdown">${renderMarkdown(m.content)}</div></div>`
+        : `<div class="msg ai"><div class="markdown">${renderMarkdown(m.content)}</div>${pendingHtml(m, i)}</div>`
     )
     .join("");
   wrap.scrollTop = wrap.scrollHeight;
 }
+
+function pendingHtml(m, i) {
+  if (!m || !Array.isArray(m.pending) || !m.pending.length || m.pendingDone) return "";
+  const label = m.pending.map((p) => p.label || "写入").join("；");
+  return `<div class="confirm-row"><button class="confirm-btn" data-confirm="${i}">确认写入 ICU</button><span class="confirm-note">${escapeHtml(
+    label
+  )}</span></div>`;
+}
+
+async function confirmWrite(idx) {
+  const m = chatMessages[idx];
+  if (!m || !Array.isArray(m.pending) || m.pendingDone) return;
+  const items = m.pending.slice();
+  const btn = document.querySelector(`[data-confirm="${idx}"]`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "写入中…";
+  }
+  const results = [];
+  try {
+    for (const p of items) {
+      const d = await api("/api/apply-write", { method: "POST", body: JSON.stringify(p) });
+      if (p.kind === "workouts") {
+        results.push(`已写入 ${d.written.length} 节：` + d.written.map((w) => `${w.name}（${w.date}，TSS ${w.tss ?? "?"}）`).join("、"));
+      } else {
+        results.push(d.changed ? "已写回「AI复盘已完成」标记" : "已经是已复盘状态");
+      }
+    }
+    m.content += "\n\n**写入结果**\n\n" + results.map((r) => "- " + r).join("\n");
+    m.pendingDone = true;
+    toast("已写入 ICU");
+  } catch (e) {
+    m.content += "\n\n写入失败：" + e.message;
+    toast("写入失败：" + e.message);
+  } finally {
+    saveChat();
+    renderChat();
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest ? e.target.closest("[data-confirm]") : null;
+  if (!b) return;
+  confirmWrite(Number(b.dataset.confirm));
+});
 
 async function sendChat() {
   if (chatSending) return;
@@ -535,7 +586,11 @@ async function sendChat() {
         memoryDays: s.memoryDays || undefined,
       }),
     });
-    chatMessages.push({ role: "assistant", content: d.reply });
+    chatMessages.push({
+      role: "assistant",
+      content: d.reply,
+      pending: Array.isArray(d.pending) && d.pending.length ? d.pending : null,
+    });
     saveChat();
     renderChat();
   } catch (e) {
@@ -639,9 +694,139 @@ if (chatIgnore) {
     const s = loadSettings();
     s.ignoreTime = chatIgnore.checked;
     saveSettings(s);
+    if (typeof syncPrefs === "function") syncPrefs();
     toast(chatIgnore.checked ? "补强模式已开：只按短板给课" : "补强模式已关：按你的可用时段排");
   });
 }
+
+// ---------- 模型思考等级（按厂商只给支持的档位） ----------
+const THINK_LABEL = {
+  auto: "自动（按复杂度选档）",
+  default: "跟随模型默认",
+  off: "关闭思考",
+  low: "低",
+  high: "高",
+  max: "最高",
+};
+let llmInfo = null; // {provider, model}
+
+function thinkCapability(provider, model) {
+  const p = String(provider || "").toLowerCase();
+  const m = String(model || "").toLowerCase();
+  if (p === "deepseek") {
+    return {
+      levels: ["auto", "default", "off", "low", "high", "max"],
+      note: "DeepSeek：关闭=不思考（更快更省）；低/高/最高对应 reasoning_effort。思考模式下 temperature 不生效。",
+    };
+  }
+  if (p === "volcano") {
+    return {
+      levels: ["auto", "default", "off", "low", "high", "max"],
+      note: "火山方舟（豆包）：关闭=thinking none；低/高/最高对应 reasoning_effort。",
+    };
+  }
+  if (p === "moonshot") {
+    const isK3 = m.includes("k3");
+    return isK3
+      ? {
+          levels: ["auto", "default", "low", "high", "max"],
+          note: "Kimi K3 始终思考、不能关闭，只能调档；选「关闭」不会生效。",
+        }
+      : {
+          levels: ["auto", "default", "off", "low", "high", "max"],
+          note: "Kimi K2.x：可以关闭思考；开启时可调 reasoning_effort。",
+        };
+  }
+  if (p === "openai") {
+    const isReasoning =
+      /^(o[1-9]|gpt-5|chatgpt-5)/.test(m) || m.includes("o3") || m.includes("o4");
+    return isReasoning
+      ? { levels: ["auto", "default", "low", "high"], note: "o 系列 / gpt-5 支持 reasoning_effort；「最高」会自动降为 high。" }
+      : { levels: [], note: "当前模型（如 gpt-4o）没有思考参数，档位不会生效；换 o 系列或 gpt-5 才有用。" };
+  }
+  return {
+    levels: [],
+    note: "自定义厂商只发通用参数，思考档位不生效（除非它自己兼容 reasoning_effort）。",
+  };
+}
+
+function thinkLevel() {
+  const v = loadSettings().llmThinking || "default";
+  return THINK_LABEL[v] ? v : "default";
+}
+
+function renderThinkButton() {
+  const btn = $("btn-chat-think");
+  if (!btn) return;
+  const provider = (llmInfo && llmInfo.provider) || loadSettings().llmProvider || "deepseek";
+  const model = (llmInfo && llmInfo.model) || loadSettings().llmModel || "";
+  const cap = thinkCapability(provider, model);
+  const lv = thinkLevel();
+  if (!cap.levels.length) {
+    btn.textContent = "思考·不支持";
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent =
+    "思考·" +
+    (lv === "auto" ? "自动" : lv === "default" ? "默认" : THINK_LABEL[lv]);
+}
+
+function renderThinkSheet() {
+  const provider = (llmInfo && llmInfo.provider) || loadSettings().llmProvider || "deepseek";
+  const model = (llmInfo && llmInfo.model) || loadSettings().llmModel || "";
+  const cap = thinkCapability(provider, model);
+  const lv = thinkLevel();
+  $("think-provider").textContent = `当前：${provider}${model ? " · " + model : ""}`;
+  $("think-note").textContent = cap.note;
+  const box = $("think-opts");
+  if (!cap.levels.length) {
+    box.innerHTML = `<button class="think-opt" disabled>这个模型没有思考档位</button>`;
+    return;
+  }
+  box.innerHTML = cap.levels
+    .map(
+      (k) => `<button class="think-opt${k === lv ? " active" : ""}" data-level="${k}">
+        <span>${THINK_LABEL[k]}</span>${k === lv ? "<i>已选</i>" : ""}
+      </button>`
+    )
+    .join("");
+  box.querySelectorAll(".think-opt").forEach((b) => {
+    b.addEventListener("click", () => {
+      const s = loadSettings();
+      s.llmThinking = b.dataset.level;
+      saveSettings(s);
+      const sel = $("set-thinking");
+      if (sel) sel.value = b.dataset.level;
+      renderThinkButton();
+      closeSheet();
+      toast("思考等级：" + THINK_LABEL[b.dataset.level]);
+    });
+  });
+}
+
+function openSheet() {
+  renderThinkSheet();
+  $("think-sheet").classList.remove("hidden");
+}
+function closeSheet() {
+  $("think-sheet").classList.add("hidden");
+}
+if ($("btn-chat-think")) {
+  $("btn-chat-think").addEventListener("click", openSheet);
+  $("think-sheet").addEventListener("click", (e) => {
+    if (e.target.dataset.close) closeSheet();
+  });
+}
+
+// 启动时问后端当前真正生效的厂商/模型（设置选「跟随服务器」也能判断对）
+api("/api/coach?action=llm_info")
+  .then((d) => {
+    if (d && d.ok) llmInfo = { provider: d.provider, model: d.model };
+  })
+  .catch(() => {})
+  .then(() => renderThinkButton());
 
 $("btn-chat-send").addEventListener("click", sendChat);
 $("chat-input").addEventListener("keydown", (e) => {
@@ -754,6 +939,10 @@ function loadSettingsIntoForm() {
   if (thinkSel && s.llmThinking) thinkSel.value = s.llmThinking;
   const ignoreBox = $("set-ignore-time");
   if (ignoreBox) ignoreBox.checked = !!s.ignoreTime;
+  const autoReviewBox = $("set-auto-review");
+  if (autoReviewBox) autoReviewBox.checked = !!s.autoReview;
+  const dailyAutoBox = $("set-daily-auto");
+  if (dailyAutoBox) dailyAutoBox.checked = s.dailyAuto !== false;
   updateModelSelect(s.llmModel || "");
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
@@ -788,13 +977,18 @@ $("btn-save-set").addEventListener("click", () => {
   if ($("plan-duration")) s.planDuration = Number($("plan-duration").value);
   const ignoreBox = $("set-ignore-time");
   if (ignoreBox) s.ignoreTime = !!ignoreBox.checked;
+  const autoReviewBox = $("set-auto-review");
+  if (autoReviewBox) s.autoReview = !!autoReviewBox.checked;
+  const dailyAutoBox = $("set-daily-auto");
+  if (dailyAutoBox) s.dailyAuto = !!dailyAutoBox.checked;
   const at = $("set-access-token").value.trim();
   if (at) s.accessToken = at;
   saveSettings(s);
   $("set-apikey").value = "";
   $("set-llm-key").value = "";
   $("set-access-token").value = "";
-  toast("已保存");
+  if (typeof syncPrefs === "function") syncPrefs(true);
+  toast("已保存（设置已同步给定时任务）");
   loadSettingsIntoForm();
 });
 
@@ -837,6 +1031,75 @@ $("btn-prompt-enhance").addEventListener("click", async () => {
     showLoading(false);
   }
 });
+
+// ---------- 把设置同步到 ICU（供 Vercel 定时任务读取） ----------
+let prefsTimer = null;
+function syncPrefs(immediate = false) {
+  clearTimeout(prefsTimer);
+  prefsTimer = setTimeout(async () => {
+    const s = loadSettings();
+    try {
+      await api("/api/prefs", {
+        method: "POST",
+        body: JSON.stringify({
+          dailyAuto: s.dailyAuto !== false,
+          windows: Array.isArray(s.planWindows) ? s.planWindows : [],
+          maxDuration: Number(s.planDuration) || 0,
+          ignoreTime: !!s.ignoreTime,
+        }),
+      });
+    } catch (e) {
+      // 同步失败不影响本地设置
+    }
+  }, immediate ? 0 : 800);
+}
+
+// ---------- 训练后自动复盘（设置里开才跑） ----------
+let autoReviewRunning = false;
+async function autoReviewOnce() {
+  const s = loadSettings();
+  if (!s.autoReview || autoReviewRunning) return;
+  // 同一次打开 App 只跑一次
+  if (sessionStorage.getItem("autoReviewDone") === "1") return;
+  // 上次已复盘过的同一节不再重复花钱（标记没写回时靠这个去重）
+  
+  sessionStorage.setItem("autoReviewDone", "1");
+  autoReviewRunning = true;
+
+  const tip = document.createElement("div");
+  tip.className = "msg ai typing";
+  tip.textContent = "自动复盘最近一节训练…";
+  $("chat-wrap").appendChild(tip);
+  $("chat-wrap").scrollTop = $("chat-wrap").scrollHeight;
+
+  try {
+    const d = await api("/api/auto-review", {
+      method: "POST",
+      body: JSON.stringify({ lastId: localStorage.getItem("autoReviewedId") || null }),
+    });
+    if (d && d.reviewed && d.reviewed.analysis) {
+      const head =
+        `**自动复盘｜${d.reviewed.date} ${d.reviewed.name}**` +
+        (d.reviewed.marked ? "（已在 ICU 标记为已复盘）" : "");
+      chatMessages.push({
+        role: "assistant",
+        content: head.replace("（已在 ICU 标记为已复盘）", "") + "\n\n" + d.reviewed.analysis,
+        pending: Array.isArray(d.pending) && d.pending.length ? d.pending : null,
+      });
+      localStorage.setItem("autoReviewedId", String(d.reviewed.id));
+      saveChat();
+    } else if (d && d.reason) {
+      // 没有待复盘的，不打扰
+    }
+  } catch (e) {
+    // 自动任务失败不弹错，避免开屏就被打断
+  } finally {
+    tip.remove();
+    renderChat();
+    autoReviewRunning = false;
+    loadOverview();
+  }
+}
 
 // ---------- 对话主界面 ----------
 function renderStatusStrip(d) {
@@ -901,4 +1164,5 @@ loadSettingsIntoForm();
 syncChatIgnore();
 switchView("chat");
 loadOverview();
+autoReviewOnce();
 renderChat();

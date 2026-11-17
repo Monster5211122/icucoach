@@ -1,5 +1,5 @@
 import { createIcuClient } from "../lib/icu.js";
-import { chatCompletion, parseJson, llmEnv } from "../lib/llm.js";
+import { chatCompletion, parseJson, llmEnv, resolveLlmConfig, withAutoThinking } from "../lib/llm.js";
 import { buildAnalyzePrompt, buildPlanPrompt, buildSingleAnalyzePrompt, buildMultiAnalyzePrompt, coachSystem } from "../lib/prompts.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
 import { authError } from "../lib/auth.js";
@@ -70,9 +70,19 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const authErr = authError(req);
     if (authErr) return res.status(authErr.status).json({ ok: false, error: authErr.error });
-    const q = String(req.url || "").split("?")[1] || "";
-    if (new URLSearchParams(q).get("action") !== "default_prompt") {
-      return res.status(400).json({ ok: false, error: "action 必须是 default_prompt" });
+    const q = new URLSearchParams(String(req.url || "").split("?")[1] || "");
+    const action = q.get("action");
+    if (action === "llm_info") {
+      // 让前端知道当前真正生效的厂商与模型，才能只显示这个模型支持的思考档位
+      try {
+        const cfg = resolveLlmConfig(llmEnv(req.headers));
+        return res.json({ ok: true, provider: cfg.provider, model: cfg.model });
+      } catch (e) {
+        return res.json({ ok: false, error: String(e.message || e) });
+      }
+    }
+    if (action !== "default_prompt") {
+      return res.status(400).json({ ok: false, error: "action 必须是 default_prompt 或 llm_info" });
     }
     return res.json({ ok: true, prompt: coachSystem() });
   }
@@ -149,7 +159,7 @@ export default async function handler(req, res) {
           { role: "system", content: systemContent },
           { role: "user", content: prompt },
         ],
-        llm
+        withAutoThinking(llm, "high")
       );
 
       // 复盘后自动提取要点写入长期记忆（失败不影响复盘结果）
@@ -306,7 +316,7 @@ export default async function handler(req, res) {
         { role: "system", content: systemContent },
         { role: "user", content: planPrompt },
       ],
-      llm,
+      withAutoThinking(llm, "max"),
       { json: true }
     );
     const plan = parseJson(content);

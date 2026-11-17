@@ -31,9 +31,11 @@
       <span class="ss-item" id="ss-week">本周 TSS —</span>
       <span class="ss-item" id="ss-plan">今日 —</span>
       <span class="ss-item" id="ss-last">—</span>
+    </div>
+    <div class="mode-row">
       <label class="ss-toggle" title="纯数据补强：忽略时段与时长，只按短板给课">
         <input type="checkbox" id="chat-ignore-time" role="switch" />
-        <span class="ss-toggle-text">补强</span>
+        <span class="ss-toggle-text">纯数据补强</span>
       </label>
     </div>
     <div class="chat-hint" id="chat-hint">直接说就行：今天怎么练、复盘最近那节、这周怎么排。教练会先看你的真实数据再回答；长按你的消息可以撤回或修改。</div>
@@ -54,7 +56,24 @@
     </div>
     <div class="chat-inputbar">
       <textarea id="chat-input" rows="1" placeholder="跟教练说点什么…"></textarea>
+      <button class="think-btn" id="btn-chat-think" aria-label="调整模型思考等级">思考</button>
       <button class="send-btn" id="btn-chat-send">发送</button>
+    </div>
+
+    <!-- 思考等级面板（按当前厂商只显示支持的档位） -->
+    <div class="sheet hidden" id="think-sheet">
+      <div class="sheet-mask" data-close="1"></div>
+      <div class="sheet-panel">
+        <div class="sheet-head">
+          <div>
+            <div class="sheet-title">模型思考等级</div>
+            <div class="sheet-sub" id="think-provider">当前：—</div>
+          </div>
+          <button class="sheet-x" data-close="1" aria-label="关闭">×</button>
+        </div>
+        <div class="think-opts" id="think-opts"></div>
+        <div class="hint" id="think-note"></div>
+      </div>
     </div>
   </main>
 
@@ -205,6 +224,26 @@
         <div class="hint">不开时按你选的可用时段与时长上限排课；开了就按短板给足剂量，只在理由里标注"这节要整块时间"。</div>
       </div>
       <div class="form-row">
+        <label>每日自动建议</label>
+        <div class="pick-list">
+          <label class="pick-item">
+            <input type="checkbox" id="set-daily-auto" />
+            <span>每天自动生成「今日建议」并写进 ICU 日历（08:00–20:00 每小时检查一次）</span>
+          </label>
+        </div>
+        <div class="hint">你手填 HRV 之前不会生成：没填 HRV 就一直等到 12:00，之后才按现有数据兜底生成。今天已有建议就跳过，不重复花钱。这里选的时段/时长/补强也会同步给定时任务。</div>
+      </div>
+      <div class="form-row">
+        <label>训练后自动复盘</label>
+        <div class="pick-list">
+          <label class="pick-item">
+            <input type="checkbox" id="set-auto-review" />
+            <span>进入 App 时自动复盘最近一节还没复盘的骑行，并把「AI复盘已完成」写回 ICU</span>
+          </label>
+        </div>
+        <div class="hint">每次只复盘 1 节（控制等待与费用），复盘过的不会再重复。只在检测到最近 5 天有未复盘的骑行时才触发。</div>
+      </div>
+      <div class="form-row">
         <label>ICU API Key</label>
         <div class="input-toggle">
           <input id="set-apikey" type="password" autocomplete="off" placeholder="留空则用服务器配置的 Key" />
@@ -249,7 +288,8 @@
       <div class="form-row">
         <label>思考强度
         <select id="set-thinking">
-          <option value="high">高（建议，稳但慢）</option>
+          <option value="auto">自动（按问题复杂度选档，推荐）</option>
+          <option value="high">高（稳但慢）</option>
           <option value="off">关闭思考（最快最省）</option>
           <option value="low">低（快一点，思考变浅）</option>
           <option value="max">最高（最慢最贵，难题才用）</option>

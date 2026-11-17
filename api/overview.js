@@ -94,8 +94,11 @@ export default async function handler(req, res) {
   // 今天的日历安排（有课/休息日）
   const todayLocalDate = nowLocalDate.toISOString().slice(0, 10);
   const evs = Array.isArray(out.today_plan) ? out.today_plan : [];
+  // 只取真正的课表事件（WORKOUT），排除便签/记忆/今日建议这类 NOTE
   const todays = evs.filter(
-    (e) => String(e.start_date_local || "").slice(0, 10) === todayLocalDate
+    (e) =>
+      String(e.start_date_local || "").slice(0, 10) === todayLocalDate &&
+      String(e.category || "").toUpperCase() === "WORKOUT"
   );
   out.today_workout = todays.length
     ? { name: todays[0].name || "", category: todays[0].category || "", type: todays[0].type || "" }

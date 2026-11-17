@@ -1,4 +1,4 @@
-import { chatCompletion, llmEnv } from "../lib/llm.js";
+import { chatCompletion, llmEnv, withAutoThinking } from "../lib/llm.js";
 import { authError } from "../lib/auth.js";
 
 const SYSTEM = `你是一位提示词工程专家，擅长把简短的想法扩展成高质量、可直接使用的 AI 系统提示词。
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
         { role: "system", content: SYSTEM },
         { role: "user", content: "我的想法是：\n" + input.trim() },
       ],
-      llmEnv(req.headers)
+      withAutoThinking(llmEnv(req.headers), "high")
     );
     return res.status(200).json({ ok: true, prompt });
   } catch (e) {

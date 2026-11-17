@@ -1,5 +1,5 @@
 import { createIcuClient } from "../lib/icu.js";
-import { chatCompletionRaw, llmEnv } from "../lib/llm.js";
+import { chatCompletionRaw, llmEnv, withAutoThinking } from "../lib/llm.js";
 import { coachSystem, buildChatDataBlock } from "../lib/prompts.js";
 import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
@@ -154,10 +154,10 @@ const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
 你拥有五个工具，只在必要时调用（闲聊或一般咨询不要调用）：
 - 用户要求复盘某次/某段时间的训练时：先调用 list_activities 找出还没有复盘标记的活动；
 - 用 get_activity_detail 拉取该活动的深度数据，再给出复盘；
-- 每复盘完一个活动，调用 mark_reviewed 标记它，并在回复末尾告诉用户“已标记”；
+- 每复盘完一个活动，调用 mark_reviewed 准备标记，并在回复末尾说明「已准备好标记，点下面的“确认写入 ICU”才会写回」；**绝不能说“已写入/已标记”**，因为工具只做暂存；
 - 用户问“今天怎么练/今天练什么”时，不要只说方向：按「判决（练/降档练/不练）→ 今天这一节（热身/主段/组间/放松，每段写确切分钟数、瓦数区间、踏频）→ 体感校准（RPE 与心率红线）→ 降一档 → 停的条件 → 为什么」给，读完他能直接上台骑。
-- 用户说“排这周课表/给我排几天”时：先把每天的课排好（按上面的时段、时长、强度两端分化、灰区占比规则），再调用 create_workouts 一次写入；不要预排他练不了的天数，每周至少留 1-2 天恢复或休息。
-- 用户明确要求写课表（如“把今天这节课写进 ICU”“帮我写一节甜区课”）时，调用 create_workout 写入，然后在回复里复述课表内容和日期，告诉用户已写入；
+- 用户说“排这周课表/给我排几天”时：先把每天的课排好（按上面的时段、时长、强度两端分化、灰区占比规则），再调用 create_workouts 准备批量写入（同样要等用户点确认）；不要预排他练不了的天数，每周至少留 1-2 天恢复或休息。
+- 用户明确要求写课表（如“把今天这节课写进 ICU”“帮我写一节甜区课”）时，调用 create_workout 准备课表，复述课表内容和日期，并说明「等你点下面的‘确认写入 ICU’按钮才会写进日历」；**禁止说已写入**；
 - 遇到值得长期记住的用户特征、训练偏好、重要结论或伤病情况时，调用 remember 写入教练记忆；同样的内容不要重复记；
 - 用户说出任何**训练约束**时必须 remember 一条（这类信息会进入课表与每日建议，不记就等于下次又要他重复一遍）：可用时段（如"白天午睡 13:00-15:30、晚上 21:30 后"）、单次时长上限、哪几天完全没空、身体问题（坐垫疼/膝痛/腰紧）、装备条件（没穿骑行裤、只有骑行台）、睡眠与工作安排；
 - 已标记（reviewed=true）的活动可以略过或只用于趋势对比，重点复盘未标记的。`;
@@ -243,6 +243,7 @@ export default async function handler(req, res) {
   );
 
   // 工具执行器（闭包持有 icu 客户端）
+  const staged = []; // 本次对话里等用户点「确认写入」的动作
   async function executeTool(name, args) {
     if (name === "list_activities") {
       const days = Math.min(30, Math.max(1, Number(args.days) || 14));
@@ -265,11 +266,18 @@ export default async function handler(req, res) {
     }
     if (name === "mark_reviewed") {
       const id = String(args.activity_id ?? "").trim();
-      const a = await icu.activity(id);
-      const r = await markReviewed(icu, a);
-      return r.changed
-        ? { ok: true, message: `已把活动「${a.name || id}」标记为已复盘` }
-        : { ok: true, message: "该活动已经是已复盘状态，无需重复标记" };
+      const a = await icu.activity(id).catch(() => null);
+      staged.push({
+        kind: "mark_reviewed",
+        activity_id: Number(id) || id,
+        source: "教练对话",
+        label: `标记「${a?.name || id}」为已复盘`,
+      });
+      return {
+        ok: true,
+        staged: true,
+        message: "已准备好写入标记，但**还没有写入**。请在回复里明确告诉用户：需要他点「确认写入 ICU」按钮才会落库。",
+      };
     }
     if (name === "create_workout") {
       const date = String(args.start_date_local || "").slice(0, 10);
@@ -283,17 +291,11 @@ export default async function handler(req, res) {
         description: typeof args.description === "string" ? args.description : "",
         moving_time: Number.isFinite(Number(args.moving_time)) ? Number(args.moving_time) : null,
       };
-      const created = await icu.writeWorkouts([workout]);
-      const ev = created[0];
+      staged.push({ kind: "workouts", workouts: [workout], source: "教练对话", label: `写入 1 节课：${workout.name}（${date}）` });
       return {
         ok: true,
-        message: "已写入 ICU 日历",
-        workout: {
-          id: ev.id,
-          name: ev.name,
-          date: ev.start_date_local,
-          tss: ev.icu_training_load ?? null,
-        },
+        staged: true,
+        message: "课表已准备好，但**还没有写入 ICU**。请告诉用户：需要他点下面的「确认写入 ICU」按钮才会写进日历。",
       };
     }
     if (name === "create_workouts") {
@@ -310,16 +312,16 @@ export default async function handler(req, res) {
           moving_time: Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : null,
         };
       });
-      const created = await icu.writeWorkouts(workouts);
+      staged.push({
+        kind: "workouts",
+        workouts,
+        source: "教练对话",
+        label: `写入 ${workouts.length} 节课：` + workouts.map((w) => `${w.name}（${w.start_date_local.slice(0, 10)}）`).join("、"),
+      });
       return {
         ok: true,
-        message: `已写入 ${created.length} 节课`,
-        workouts: created.map((ev) => ({
-          id: ev.id,
-          name: ev.name,
-          date: ev.start_date_local,
-          tss: ev.icu_training_load ?? null,
-        })),
+        staged: true,
+        message: `已准备好 ${workouts.length} 节课，但**还没有写入 ICU**。请告诉用户：需要他点下面的「确认写入 ICU」按钮才会写进日历。`,
       };
     }
     if (name === "remember") {
@@ -378,13 +380,22 @@ export default async function handler(req, res) {
         : "") +
       TOOL_INSTRUCTIONS;
 
+    // 「自动」思考档位：按这轮问题的复杂度选档
+    const lastText = [...history].reverse().find((m) => m.role === "user")?.content || "";
+    const heavy =
+      /复盘|课表|排课|计划|对比|分析|评估|生成|写入|为什么|这周|下周|怎么练|总结/.test(lastText) ||
+      lastText.length > 120 ||
+      history.length >= 8;
+    const light = lastText.length <= 12 && !heavy;
+    const autoLv = heavy ? "max" : light ? "low" : "high";
+
     const reply = await chatWithTools(
       [{ role: "system", content: system }, ...history],
       TOOLS,
       executeTool,
-      llmEnv(req.headers)
+      withAutoThinking(llmEnv(req.headers), autoLv)
     );
-    return res.status(200).json({ ok: true, reply });
+    return res.status(200).json({ ok: true, reply, pending: staged });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String(e.message || e) });
   }

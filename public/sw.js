@@ -1,5 +1,5 @@
 // Service Worker：页面与脚本走网络优先（保证新版本立即生效），其余静态资源缓存优先，API 始终走网络
-const CACHE = "icucoach-v4";
+const CACHE = "icucoach-v5";
 const STATIC = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
@@ -20,8 +20,8 @@ self.addEventListener("fetch", (e) => {
   // API 请求不缓存
   if (url.pathname.startsWith("/api/")) return;
 
-  // 页面和脚本：网络优先，拿不到再用缓存（避免新旧版本混用导致页面卡死）
-  if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/app.js") {
+  // 页面、脚本、样式：一律网络优先（避免旧 CSS 配新 JS，界面元素错位或按钮常显）
+  if (url.origin === self.location.origin) {
     e.respondWith(
       fetch(e.request)
         .then((r) => {
