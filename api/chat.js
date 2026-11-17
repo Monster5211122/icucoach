@@ -369,7 +369,7 @@ export default async function handler(req, res) {
       base +
       "\n\n（以下是随对话实时注入的运动员数据，回答训练问题必须基于这些数据，不要编造数字。）\n\n" +
       buildChatDataBlock({ profile, fitness, wellness, activities, baseline }) +
-      `\n\n今天是 ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}（UTC+8），所有日期与空窗按这个算。` +
+      `\n\n现在是 ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ")}（UTC+8，${["周日","周一","周二","周三","周四","周五","周六"][new Date(Date.now() + 8 * 3600 * 1000).getUTCDay()]}）。所有日期、空窗、相对时间都按这个算；回答前先算最近一次训练结束到现在过了多久，刚收车不到 3 小时就不要问他几点睡着、次日恢复这类还没发生的事。` +
       (calendarLine(events) ? `\n\n【ICU 日历上已有的安排（优先尊重，不要重复排）】\n${calendarLine(events)}` : "") +
       (ignoreTime
         ? `\n\n【解除限制模式（已开启）】忽略他的可用时段、单次时长上限、带娃与工作冲突：只按数据里的短板给最该练的课，不要为了迁就晚上而降剂量。剂量按短板定：有氧底弱→90-120min 连续 Z2；阈值耐力弱→2x20 @93-95%；VO2max 缺→5x3 @110-115%；灰区≥50% 时只排两端。每节在理由里标一句"这节要整块时间（含热身约 X 小时），排不出来就拆两段、效果降级约三成"，但剂量不降。`
