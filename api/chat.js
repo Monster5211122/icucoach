@@ -361,6 +361,7 @@ export default async function handler(req, res) {
       .filter((w) => W_LABEL[w]);
     const winText = (wins.length ? wins : ["night"]).map((w) => W_LABEL[w]).join(" / ");
     const maxDur = Number(req.headers["x-plan-duration"] || 0);
+    const ignoreTime = String(req.headers["x-plan-ignore-time"] || "") === "1";
 
     const system =
       base +
@@ -368,6 +369,9 @@ export default async function handler(req, res) {
       buildChatDataBlock({ profile, fitness, wellness, activities, baseline }) +
       `\n\n今天是 ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}（UTC+8），所有日期与空窗按这个算。` +
       (calendarLine(events) ? `\n\n【ICU 日历上已有的安排（优先尊重，不要重复排）】\n${calendarLine(events)}` : "") +
+      (ignoreTime
+        ? `\n\n【纯数据补强模式（已开启）】忽略他的可用时段、单次时长上限、带娃与工作冲突：只按数据里的短板给最该练的课，不要为了迁就晚上而降剂量。剂量按短板定：有氧底弱→90-120min 连续 Z2；阈值耐力弱→2x20 @93-95%；VO2max 缺→5x3 @110-115%；灰区≥50% 时只排两端。每节在理由里标一句"这节要整块时间（含热身约 X 小时），排不出来就拆两段、效果降级约三成"，但剂量不降。`
+        : "") +
       `\n\n【他的可用时段】${winText}${maxDur > 0 ? `；单次最长 ${maxDur} 分钟` : ""}\n晚间按强度×时长上限排：≤60 分钟可到阈值/VO2max，60-90 分钟最高甜区（FTP 85-90%），90-120 分钟只做 Z2（≤70%），>120 分钟晚间不给。长课与强度课优先白天；晚上只留 45-60 分钟轻课。` +
       (memory
         ? "\n\n【教练长期记忆（你此前记录过的要点，时间越近越可靠）】\n" + memory

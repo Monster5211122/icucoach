@@ -251,6 +251,7 @@ export default async function handler(req, res) {
       mode = "indoor",
       windows,
       maxDuration,
+      ignoreTime,
     } = req.body;
     // 默认日期：当天可选课表用“今天”，多天计划用“明天”（均按 UTC+8）
     const todayLocal = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -293,6 +294,7 @@ export default async function handler(req, res) {
         mode,
         windows: Array.isArray(windows) && windows.length ? windows : ["night"],
         maxDuration: Number.isFinite(Number(maxDuration)) ? Number(maxDuration) : 0,
+        ignoreTime: ignoreTime === true || String(ignoreTime) === "1",
       },
       custom
     );

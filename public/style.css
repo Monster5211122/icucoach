@@ -276,3 +276,5 @@ textarea { resize: vertical; }
 .chat-clear { margin: 0 0 8px; font-size: 12px; padding: 6px; }
 .chips.checkin { padding-top: 4px; }
 .chip.ghost { background: transparent; border-color: var(--border); color: var(--muted); font-size: 12px; padding: 6px 10px; }
+
+.chip.strong { border-color: var(--accent); color: var(--accent); font-weight: 700; }

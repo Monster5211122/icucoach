@@ -33,6 +33,7 @@ function requestHeaders(extra = {}) {
   if (Array.isArray(s.planWindows) && s.planWindows.length && s.planWindows.join(",") !== "night")
     h["x-plan-windows"] = s.planWindows.join(",");
   if (s.planDuration != null) h["x-plan-duration"] = String(s.planDuration);
+  if (s.ignoreTime) h["x-plan-ignore-time"] = "1";
   if (s.llmThinking) {
     h["x-llm-thinking"] = s.llmThinking === "off" ? "off" : "on";
     h["x-llm-effort"] = s.llmThinking === "off" ? "" : s.llmThinking;
@@ -667,6 +668,8 @@ function loadSettingsIntoForm() {
   if (s.llmBaseUrl) $("set-llm-base").value = s.llmBaseUrl;
   const thinkSel = $("set-thinking");
   if (thinkSel && s.llmThinking) thinkSel.value = s.llmThinking;
+  const ignoreBox = $("set-ignore-time");
+  if (ignoreBox) ignoreBox.checked = !!s.ignoreTime;
   updateModelSelect(s.llmModel || "");
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
@@ -699,6 +702,8 @@ $("btn-save-set").addEventListener("click", () => {
   // 课表页的可用时段/时长上限也存下来，供每日建议复用
   if (windowsBox) s.planWindows = getPlanWindows();
   if ($("plan-duration")) s.planDuration = Number($("plan-duration").value);
+  const ignoreBox = $("set-ignore-time");
+  if (ignoreBox) s.ignoreTime = !!ignoreBox.checked;
   const at = $("set-access-token").value.trim();
   if (at) s.accessToken = at;
   saveSettings(s);

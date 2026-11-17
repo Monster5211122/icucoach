@@ -45,6 +45,7 @@
       <button class="chip" data-say="把我最近一次还没复盘的训练做深度复盘，先问我主观感受再下判断。">复盘最近一节</button>
       <button class="chip" data-say="按我现在真实的数据排这周课表，写完直接写进 ICU 日历。">这周课表</button>
       <button class="chip" data-say="把最近 7 天的负荷、灰区占比和恢复趋势讲清楚，别念指标，说问题。">我的数据</button>
+      <button class="chip strong" data-say="纯数据补强：不要考虑我能练多久、带孩子这些限制，只按我数据里的短板给最该练的课和这周安排。">纯数据补强</button>
     </div>
     <div class="chat-inputbar">
       <textarea id="chat-input" rows="1" placeholder="跟教练说点什么…"></textarea>
@@ -189,6 +190,16 @@
     <button class="ghost-btn" id="btn-back-chat" style="margin-bottom:10px">← 返回对话</button>
     <section class="card">
       <h2 class="card-title">设置</h2>
+      <div class="form-row">
+        <label>推荐模式</label>
+        <div class="pick-list">
+          <label class="pick-item">
+            <input type="checkbox" id="set-ignore-time" />
+            <span>纯数据补强（忽略时段、带娃与时长限制，只按数据短板给最该练的课）</span>
+          </label>
+        </div>
+        <div class="hint">不开时按你选的可用时段与时长上限排课；开了就按短板给足剂量，只在理由里标注"这节要整块时间"。</div>
+      </div>
       <div class="form-row">
         <label>ICU API Key</label>
         <div class="input-toggle">

@@ -57,6 +57,7 @@ export default async function handler(req, res) {
     const daily = await generateAndStoreDaily(icu, llmEnv(req.headers), retention, {
       windows: windows.length ? windows : undefined,
       maxDuration: Number.isFinite(maxDurHeader) ? maxDurHeader : 0,
+      ignoreTime: String(req.headers["x-plan-ignore-time"] || "") === "1",
     });
     return res.status(200).json({ ok: true, daily, generated: true });
   } catch (e) {
