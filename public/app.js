@@ -480,7 +480,10 @@ function rateCourse(c, st) {
     return st.ignoreTime
       ? ["推荐", "解除限制：按短板给足剂量；这节要整块时间，排不进就拆两段、效果降级"]
       : ["不推荐", "本周总量还不需要这个长度"];
-  if (key === "threshold") return ["可选", "距上次 ≥1 天再上，别连着两天"];
+  if (key === "threshold")
+    return st.lastDays === 0
+      ? ["可选", "今天已经练过，别连着两天上阈值；明天再排"]
+      : ["推荐", "常规状态下的主课：3×8 阈值，距上次 ≥1 天"];
   if (key === "vo2") return ["不推荐", "当前 Form 不适合，先把有氧量补上"];
   return ["可选", "按时间选"];
 }
