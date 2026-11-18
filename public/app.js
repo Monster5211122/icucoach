@@ -457,7 +457,7 @@ function rateCourse(c, st) {
   const hardDays = Number.isFinite(Number(st.hardDays)) ? Number(st.hardDays) : null;
   // Form 不是硬门槛：只看睡眠与红旗（红旗已由 level=low 拦掉）
   const stateOk = st.sleep == null || st.sleep >= 6.5;
-  if (hardDays != null && hardDays > 6 && stateOk) {
+  if (hardDays != null && hardDays > 6 && stateOk && !(h && h.weak_sustained)) {
     if (key === "vo2") return ["推荐", `距上次 IF≥95% 已 ${hardDays} 天，睡眠 ${st.sleep != null ? st.sleep.toFixed(1) + "h" : "正常"}、无红旗，摄氧这一档该补（5×3 @110%）`];
     if (key === "sweet") return ["可选", "甜区仍可做，但今天优先补摄氧缺口"];
     if (key === "threshold") return ["可选", "阈值和 VO2 二选一；今天先把 ≥95% 的那档补上"];
@@ -482,6 +482,13 @@ function rateCourse(c, st) {
     if (key === "z2" && cMinutes >= 120) return ["可选", "时间够就做，注意补水"];
     if (key === "z2") return ["可选", "有氧底随时可以补"];
     return ["可选", "今天不需要它"];
+  }
+  // normal：短板是 20min 续航时，耐久课优先，VO2 只做省时间备选，阈值往后排
+  if (weak) {
+    if (key === "sweet") return ["推荐", "20 分钟续航仍是第一短板：连续 20min 两遍比换花样更有用"];
+    if (key === "vo2") return ["可选", "省时间的次选（约 35-50min）；短时能力是你的强项，摄氧不是当前短板"];
+    if (key === "threshold") return ["不推荐", "先能连续 20min 撑满两遍，再谈阈值；排早了只会两头都不够"];
+    if (key === "z2" && cMinutes === 85) return ["可选", "有氧底可保，但今天优先级低于甜区长段"];
   }
   // normal
   if (key === "z2" && cMinutes === 85) return ["推荐", "剂量与当前 CTL 最匹配：加时长不加功率"];
