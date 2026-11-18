@@ -184,84 +184,53 @@ async function loadOverview(retry = 1) {
 
 function renderOverview(d) {
   if (typeof renderStatusStrip === "function") renderStatusStrip(d);
-  renderDaily(d.daily);
 }
 
-// 今日建议
-function renderDaily(daily) {
-  const s = loadSettings();
-  const autoOn = s.dailyAuto === true; // 自动建议默认关闭，只有显式打开才自动生成
-  const btn = $("btn-daily-regen");
-  if (daily && daily.text) {
-    $("daily-text").innerHTML = renderMarkdown(daily.text);
-    $("daily-date").textContent = daily.date ? "（" + daily.date + "）" : "";
-    $("daily-hint").classList.add("hidden");
-    if (btn) btn.textContent = "重新生成";
-  } else {
-    $("daily-text").textContent = "今天还没有 AI 建议";
-    if (autoOn) {
-      $("daily-hint").textContent = "正在后台生成（约十几秒），稍后点右上角「刷新」查看。";
-      ensureDaily();
-    } else {
-      $("daily-hint").textContent = "自动生成已关闭。点右侧「生成今日建议」手动生成（约十几秒，会写进 ICU 日历）。";
-    }
-    $("daily-hint").classList.remove("hidden");
-    if (btn) btn.textContent = "生成今日建议";
-    setDailyOpen(true); // 没有建议时直接摊开，让人看到「怎么生成」
-  }
-}
-
-// 今日建议折叠卡片
-function setDailyOpen(open) {
-  const box = $("daily-text");
-  const hint = $("daily-hint");
-  const chev = $("daily-chevron");
-  const toggle = $("btn-daily-toggle");
+// 今日建议：点顶栏「建议」→ 生成并写入 ICU 日历（便签），结果显示在弹层里
+let dailyWriting = false;
+function openDailySheet(date, text) {
+  const box = $("daily-sheet");
   if (!box) return;
-  box.classList.toggle("hidden", !open);
-  if (hint && !hint.dataset.hasText) hint.classList.toggle("hidden", !open);
-  else if (hint) hint.classList.toggle("hidden", !open);
-  if (chev) chev.textContent = open ? "▾" : "▸";
-  if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  $("daily-sheet-text").innerHTML = renderMarkdown(text || "");
+  $("daily-sheet-sub").textContent = date ? date + " · 已写入 ICU 日历" : "已写入 ICU 日历";
+  $("daily-sheet-hint").textContent = "写入的是日历里的「AI 今日建议」便签；同一天再点会覆盖那一条，不重复新增。";
+  box.classList.remove("hidden");
 }
-$("btn-daily-toggle").addEventListener("click", () => {
-  const box = $("daily-text");
-  setDailyOpen(box.classList.contains("hidden"));
+function closeDailySheet() {
+  const box = $("daily-sheet");
+  if (box) box.classList.add("hidden");
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest) return;
+  if (e.target.closest("#daily-sheet [data-close]")) closeDailySheet();
 });
 
-let dailyGenerating = false;
-async function ensureDaily() {
-  if (dailyGenerating) return;
-  dailyGenerating = true;
-  try {
-    await api("/api/daily-suggestion", { method: "POST", body: "{}" });
-    renderOverview(await api("/api/overview"));
-    setDailyOpen(true);
-  } catch (e) {
-    $("daily-hint").textContent = "今日建议生成失败：" + e.message;
-    $("daily-hint").classList.remove("hidden");
-  } finally {
-    dailyGenerating = false;
-  }
+const dailyWriteBtn = $("btn-daily-write");
+if (dailyWriteBtn) {
+  dailyWriteBtn.addEventListener("click", async () => {
+    if (dailyWriting) return;
+    dailyWriting = true;
+    const old = dailyWriteBtn.textContent;
+    dailyWriteBtn.textContent = "写入中…";
+    dailyWriteBtn.disabled = true;
+    try {
+      // 手动按钮：直接生成并覆盖今天那条（同一天不会新增第二条）
+      const r = await api("/api/daily-suggestion", {
+        method: "POST",
+        body: JSON.stringify({ force: true }),
+      });
+      const daily = r.daily || r;
+      openDailySheet(daily.date, daily.text);
+      toast("今日建议已写入 ICU 日历");
+    } catch (e) {
+      toast("写入失败：" + e.message);
+    } finally {
+      dailyWriteBtn.textContent = old || "建议";
+      dailyWriteBtn.disabled = false;
+      dailyWriting = false;
+    }
+  });
 }
-
-$("btn-daily-regen").addEventListener("click", async () => {
-  showLoading(true);
-  const hasText = !!($("daily-date").textContent || "").trim();
-  try {
-    await api("/api/daily-suggestion", {
-      method: "POST",
-      body: JSON.stringify({ force: hasText }),
-    });
-    renderOverview(await api("/api/overview"));
-    setDailyOpen(true);
-    toast("已重新生成今日建议");
-  } catch (e) {
-    toast("生成失败：" + e.message);
-  } finally {
-    showLoading(false);
-  }
-});
 
 // ---------- 单次 / 多次复盘 ----------
 $("btn-single").addEventListener("click", async () => {

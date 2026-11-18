@@ -448,9 +448,3 @@ button:disabled, .chip:disabled { filter: none; transform: none; box-shadow: non
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 对话页内嵌的「今日建议」折叠卡片 */
-.daily-inline { margin: 0 0 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
-.daily-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.daily-toggle { background: none; border: 0; color: var(--text); font-size: 14px; font-weight: 600; padding: 4px 0; display: inline-flex; align-items: center; gap: 6px; }
-.daily-date { color: var(--muted); font-weight: 400; font-size: 12px; }
-.daily-inline .markdown { margin-top: 6px; }

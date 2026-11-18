@@ -17,6 +17,7 @@
     <div class="topbar-title">ICU AI 教练</div>
     <div class="topbar-actions">
       <button class="ghost-btn" id="btn-refresh" aria-label="刷新状态">刷新</button>
+      <button class="ghost-btn" id="btn-daily-write" aria-label="生成今日建议并写入 ICU">建议</button>
       <button class="ghost-btn" id="btn-open-review" aria-label="复盘">复盘</button>
       <button class="ghost-btn" id="btn-open-settings" aria-label="设置">设置</button>
     </div>
@@ -38,16 +39,6 @@
         <span class="ss-toggle-text">解除限制</span>
       </label>
     </div>
-    <section class="daily-inline" id="daily-inline">
-      <div class="daily-head">
-        <button class="daily-toggle" id="btn-daily-toggle" aria-expanded="false">
-          <span id="daily-chevron">▸</span> 今日建议 <span class="daily-date" id="daily-date"></span>
-        </button>
-        <button class="ghost-btn" id="btn-daily-regen">生成今日建议</button>
-      </div>
-      <div class="markdown hidden" id="daily-text"></div>
-      <div class="hint hidden" id="daily-hint"></div>
-    </section>
     <div class="chat-hint" id="chat-hint">直接说就行：今天怎么练、复盘最近那节、这周怎么排。教练会先看你的真实数据再回答；长按你的消息可以撤回或修改。</div>
     <div class="chat-wrap" id="chat-wrap"></div>
     <div class="chips checkin" id="chat-checkin">
@@ -82,6 +73,22 @@
         </div>
         <div class="think-opts" id="think-opts"></div>
         <div class="hint" id="think-note"></div>
+      </div>
+    </div>
+
+    <!-- 今日建议弹层（手动生成并写入 ICU 日历） -->
+    <div class="sheet hidden" id="daily-sheet">
+      <div class="sheet-mask" data-close="1"></div>
+      <div class="sheet-panel">
+        <div class="sheet-head">
+          <div>
+            <div class="sheet-title">今日建议</div>
+            <div class="sheet-sub" id="daily-sheet-sub">—</div>
+          </div>
+          <button class="sheet-x" data-close="1" aria-label="关闭">×</button>
+        </div>
+        <div class="markdown" id="daily-sheet-text">加载中…</div>
+        <div class="hint" id="daily-sheet-hint"></div>
       </div>
     </div>
   </main>
@@ -210,10 +217,10 @@
         <div class="pick-list">
           <label class="pick-item">
             <input type="checkbox" id="set-daily-auto" />
-            <span>每天自动生成「今日建议」并写进 ICU 日历（08:00–20:00 每小时检查一次）· 默认关闭，关着就只在你点「生成今日建议」时生成</span>
+            <span>每天自动生成「今日建议」并写进 ICU 日历（08:00–20:00 每小时检查一次）· 默认关闭，关着就只在你点顶栏「建议」时生成</span>
           </label>
         </div>
-        <div class="hint">关着不影响手动生成：概览页「生成今日建议」按钮随时可用，生成一次就写进 ICU 日历。打开后才会按上面规则自动跑；今天已有建议就跳过，不重复花钱。</div>
+        <div class="hint">关着不影响手动生成：顶栏「建议」按钮随时可用，点一次生成并写进 ICU 日历（同一天覆盖，不重复新增）。打开后才会按上面规则自动跑；今天已有建议就跳过，不重复花钱。</div>
       </div>
       <div class="form-row">
         <label>训练后自动复盘</label>
