@@ -1276,6 +1276,10 @@ function tapThen(el, fn, delay = 110) {
   setTimeout(() => { el.style.filter = ""; }, 160);
   setTimeout(fn, delay);
 }
+$("btn-open-overview").addEventListener("click", (e) =>
+  tapThen(e.currentTarget, () => { switchView("overview"); loadOverview(); })
+);
+$("btn-back-chat-3").addEventListener("click", () => switchView("chat"));
 $("btn-open-settings").addEventListener("click", (e) => tapThen(e.currentTarget, () => switchView("settings")));
 $("btn-open-review").addEventListener("click", (e) => tapThen(e.currentTarget, () => switchView("analyze")));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));

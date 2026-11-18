@@ -245,7 +245,10 @@ textarea { resize: vertical; }
 .chat-clear { margin-top: 6px; }
 
 /* 对话主界面 */
-.topbar-actions { display: flex; gap: 8px; }
+.topbar-actions { display: flex; gap: 6px; }
+/* 顶栏四个按钮（刷新/概览/复盘/设置）在 390px 宽度下要放得下 */
+.topbar-actions .ghost-btn { padding: 6px 9px; font-size: 13px; }
+.topbar-title { font-size: 17px; }
 .chat-main {
   display: flex; flex-direction: column;
   padding: 6px 16px 0;
