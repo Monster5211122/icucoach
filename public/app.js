@@ -220,15 +220,24 @@ function renderOverview(d) {
 
 // 今日建议
 function renderDaily(daily) {
+  const s = loadSettings();
+  const autoOn = s.dailyAuto === true; // 自动建议默认关闭，只有显式打开才自动生成
+  const btn = $("btn-daily-regen");
   if (daily && daily.text) {
     $("daily-text").innerHTML = renderMarkdown(daily.text);
     $("daily-date").textContent = daily.date ? "（" + daily.date + "）" : "";
     $("daily-hint").classList.add("hidden");
+    if (btn) btn.textContent = "重新生成";
   } else {
-    $("daily-text").textContent = "今日建议还没生成";
-    $("daily-hint").textContent = "正在后台生成（约十几秒），稍后点右上角「刷新」查看。";
+    $("daily-text").textContent = "今天还没有 AI 建议";
+    if (autoOn) {
+      $("daily-hint").textContent = "正在后台生成（约十几秒），稍后点右上角「刷新」查看。";
+      ensureDaily();
+    } else {
+      $("daily-hint").textContent = "自动生成已关闭。点右侧「生成今日建议」手动生成（约十几秒，会写进 ICU 日历）。";
+    }
     $("daily-hint").classList.remove("hidden");
-    ensureDaily();
+    if (btn) btn.textContent = "生成今日建议";
   }
 }
 
@@ -249,10 +258,11 @@ async function ensureDaily() {
 
 $("btn-daily-regen").addEventListener("click", async () => {
   showLoading(true);
+  const hasText = !!($("daily-date").textContent || "").trim();
   try {
     await api("/api/daily-suggestion", {
       method: "POST",
-      body: JSON.stringify({ force: true }),
+      body: JSON.stringify({ force: hasText }),
     });
     renderOverview(await api("/api/overview"));
     toast("已重新生成今日建议");
@@ -1033,7 +1043,7 @@ function loadSettingsIntoForm() {
   const autoReviewBox = $("set-auto-review");
   if (autoReviewBox) autoReviewBox.checked = !!s.autoReview;
   const dailyAutoBox = $("set-daily-auto");
-  if (dailyAutoBox) dailyAutoBox.checked = s.dailyAuto !== false;
+  if (dailyAutoBox) dailyAutoBox.checked = s.dailyAuto === true;
   updateModelSelect(s.llmModel || "");
   $("set-apikey").placeholder = s.apiKey
     ? "已保存（留空则不变，重新输入可更换）"
@@ -1133,7 +1143,7 @@ function syncPrefs(immediate = false) {
       await api("/api/prefs", {
         method: "POST",
         body: JSON.stringify({
-          dailyAuto: s.dailyAuto !== false,
+          dailyAuto: s.dailyAuto === true,
           windows: Array.isArray(s.planWindows) ? s.planWindows : [],
           maxDuration: Number(s.planDuration) || 0,
           ignoreTime: !!s.ignoreTime,
