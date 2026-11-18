@@ -446,14 +446,6 @@ function rateCourse(c, st) {
   const weakProof = h && h.test && h.test.longest_min != null
     ? `${h.test.date} FTP 测试最长工作段只有 ${h.test.longest_min}min`
     : (h && h.sustained ? `近 21 天 ≥88%FTP 最长只有 ${h.sustained.min}min` : "没有 20min 连续段");
-  // 距上次 IF≥95%（VO2/阈值）超过 6 天：摄氧缺口优先，直接推 VO2max
-  const hardDays = Number.isFinite(Number(st.hardDays)) ? Number(st.hardDays) : null;
-  if (hardDays != null && hardDays > 6) {
-    if (key === "vo2") return ["推荐", `距上次 IF≥95% 已 ${hardDays} 天，摄氧这一档该补（5×3 @110%）`];
-    if (key === "sweet") return ["可选", "甜区仍可做，但今天优先补摄氧缺口"];
-    if (key === "threshold") return ["可选", "阈值和 VO2 二选一；今天先把 ≥95% 的那档补上"];
-    if (key === "z2") return ["可选", "有氧底随时能补，今天先补摄氧"];
-  }
   // 恢复不足时仍先保恢复，不受短板排序影响
   if (level === "low") {
     if (key === "recovery") return ["推荐", "今天只该做这档：相比训练，恢复更值钱"];
@@ -461,6 +453,16 @@ function rateCourse(c, st) {
     if (key === "z2") return ["不推荐", "先补恢复与睡眠，长有氧往后放"];
     return ["不推荐", "强度课会在恢复不足时加深疲劳"];
   }
+  // 距上次 IF≥95% 超过 6 天 + 实际状态够（Form ≥ -15 且睡眠 ≥6.5h，未触发低恢复红旗）：才直推 VO2max
+  const hardDays = Number.isFinite(Number(st.hardDays)) ? Number(st.hardDays) : null;
+  const stateOk = (st.form == null || st.form >= -15) && (st.sleep == null || st.sleep >= 6.5);
+  if (hardDays != null && hardDays > 6 && stateOk) {
+    if (key === "vo2") return ["推荐", `距上次 IF≥95% 已 ${hardDays} 天，且状态够（Form ${Math.round(st.form ?? 0)}），摄氧这一档该补（5×3 @110%）`];
+    if (key === "sweet") return ["可选", "甜区仍可做，但今天优先补摄氧缺口"];
+    if (key === "threshold") return ["可选", "阈值和 VO2 二选一；今天先把 ≥95% 的那档补上"];
+    if (key === "z2") return ["可选", "有氧底随时能补，今天先补摄氧"];
+  }
+
   // 解除限制 = 不看时段与时长，改按短板选课型；关闭时按常规状态排，3×8 阈值照常可用
   if (st.ignoreTime && (weak || weakUnknown)) {
     if (key === "sweet")
