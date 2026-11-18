@@ -241,8 +241,6 @@ const COURSES = [
     id: "recovery",
     sys: "recovery",
     name: "Z1 恢复 40min",
-    minutes: 40,
-    tss: 20,
     why: "纯恢复，只为了让腿动起来，不产生训练负荷。",
     steps: [
       { label: "Recovery", min: 40, pct: [50, 60], cad: 85 },
@@ -252,8 +250,6 @@ const COURSES = [
     id: "z2-60",
     sys: "z2",
     name: "Z2 有氧 60min",
-    minutes: 60,
-    tss: 46,
     why: "短一档的有氧，时间不够时的标准选择。",
     steps: [
       { label: "Warm-up", min: 8, pct: [50, 65], cad: 90, ramp: true },
@@ -265,8 +261,6 @@ const COURSES = [
     id: "z2-85",
     sys: "z2",
     name: "Z2 有氧 85min",
-    minutes: 85,
-    tss: 66,
     why: "主力有氧课：加时长不加功率，CTL 靠它慢慢抬。",
     steps: [
       { label: "Warm-up", min: 10, pct: [50, 68], cad: 90, ramp: true },
@@ -278,8 +272,6 @@ const COURSES = [
     id: "z2-120",
     sys: "z2",
     name: "Z2 长距 120min",
-    minutes: 120,
-    tss: 92,
     why: "周末型长课，练的是抗衰减和补给，不是强度。",
     steps: [
       { label: "Warm-up", min: 10, pct: [50, 68], cad: 90, ramp: true },
@@ -291,8 +283,6 @@ const COURSES = [
     id: "sweet-2x20",
     sys: "sweet",
     name: "甜区 2×20min",
-    minutes: 80,
-    tss: 78,
     why: "甜区（88-92% FTP），性价比最高的阈值下刺激。",
     steps: [
       { label: "Warm-up", min: 12, pct: [50, 70], cad: 90, ramp: true },
@@ -306,8 +296,6 @@ const COURSES = [
     id: "threshold-3x8",
     sys: "threshold",
     name: "阈值 3×8min",
-    minutes: 68,
-    tss: 72,
     why: "阈值（93-95% FTP），练的是顶住乳酸的能力。",
     steps: [
       { label: "Warm-up", min: 12, pct: [50, 72], cad: 90, ramp: true },
@@ -323,8 +311,6 @@ const COURSES = [
     id: "vo2-5x3",
     sys: "vo2",
     name: "VO2max 5×3min",
-    minutes: 62,
-    tss: 62,
     why: "摄氧课（106-115% FTP），一周最多一次，代价大。",
     steps: [
       { label: "Warm-up", min: 12, pct: [50, 75], cad: 90, ramp: true },
@@ -341,6 +327,21 @@ const COURSES = [
     ],
   },
 ];
+
+// 时长与 TSS 一律由分段算出：总时长 = 各段之和，TSS ≈ Σ(IF²×100×小时)
+// 这样不会再出现“分段加起来 50 分钟、标题写 55 分钟”这种自相矛盾
+function courseStats(c) {
+  let minutes = 0;
+  let tss = 0;
+  for (const seg of c.steps) {
+    minutes += seg.min;
+    // 区间段（含 ramp）取中点，固定段取单值
+    const pct = seg.pct[0] === seg.pct[1] ? seg.pct[0] : (seg.pct[0] + seg.pct[1]) / 2;
+    const IF = pct / 100;
+    tss += IF * IF * 100 * (seg.min / 60);
+  }
+  return { minutes, tss: Math.round(tss) };
+}
 
 function courseState(d) {
   // 优先用「只算已完成活动」重算的负荷；ICU 自带的 ctl/atl/form 会把日历里的计划课也卷进曲线
@@ -398,9 +399,10 @@ function courseState(d) {
 function rateCourse(c, st) {
   const level = st.level;
   const key = c.sys;
+  const cMinutes = courseStats(c).minutes;
   if (level === "low") {
     if (key === "recovery") return ["推荐", "今天只该做这档：相比训练，恢复更值钱"];
-    if (key === "z2" && c.minutes <= 60) return ["可选", "短 Z2 可以，功率保持 68%，别再往上加"];
+    if (key === "z2" && cMinutes <= 60) return ["可选", "短 Z2 可以，功率保持 68%，别再往上加"];
     if (key === "z2") return ["不推荐", "先补恢复与睡眠，长有氧往后放"];
     return ["不推荐", "强度课会在恢复不足时加深疲劳"];
   }
@@ -408,15 +410,15 @@ function rateCourse(c, st) {
     if (key === "threshold") return ["推荐", "恢复有余量，这周正缺阈值刺激"];
     if (key === "vo2") return ["推荐", "有余量且距上次 ≥2 天，摄氧课可以上"];
     if (key === "sweet") return ["推荐", "第二优先，比阈值便宜"];
-    if (key === "z2" && c.minutes >= 120) return ["可选", "时间够就做，注意补水"];
+    if (key === "z2" && cMinutes >= 120) return ["可选", "时间够就做，注意补水"];
     if (key === "z2") return ["可选", "有氧底随时可以补"];
     return ["可选", "今天不需要它"];
   }
   // normal
-  if (key === "z2" && c.minutes === 85) return ["推荐", "剂量与当前 CTL 最匹配：加时长不加功率"];
+  if (key === "z2" && cMinutes === 85) return ["推荐", "剂量与当前 CTL 最匹配：加时长不加功率"];
   if (key === "sweet") return ["推荐", "有刺激但不深，适合正常状态"];
-  if (key === "z2" && c.minutes <= 60) return ["可选", "时间不够就用这档"];
-  if (key === "z2" && c.minutes >= 120) return ["不推荐", "本周总量还不需要这个长度"];
+  if (key === "z2" && cMinutes <= 60) return ["可选", "时间不够就用这档"];
+  if (key === "z2" && cMinutes >= 120) return ["不推荐", "本周总量还不需要这个长度"];
   if (key === "threshold") return ["可选", "距上次 ≥1 天再上，别连着两天"];
   if (key === "vo2") return ["不推荐", "当前 Form 不适合，先把有氧量补上"];
   return ["可选", "按时间选"];
@@ -528,13 +530,14 @@ function renderCourses() {
   if (!list) return;
   list.innerHTML = COURSES.map((c) => {
     const [verdict, reason] = rateCourse(c, st);
+    const stats = courseStats(c);
     const cls = verdict === "推荐" ? "ok" : verdict === "可选" ? "mid" : "no";
     return `<button class="course-item ${cls}" data-id="${c.id}">
       <div class="course-head">
         <span class="course-name">${c.name}</span>
         <span class="course-verdict ${cls}">${verdict}</span>
       </div>
-      <div class="course-meta">${c.minutes}min · TSS 约 ${c.tss} · ${c.sys === "recovery" ? "恢复" : c.sys === "z2" ? "有氧" : c.sys === "sweet" ? "甜区" : c.sys === "threshold" ? "阈值" : "摄氧"}</div>
+      <div class="course-meta">${stats.minutes}min · TSS 约 ${stats.tss} · ${c.sys === "recovery" ? "恢复" : c.sys === "z2" ? "有氧" : c.sys === "sweet" ? "甜区" : c.sys === "threshold" ? "阈值" : "摄氧"}</div>
       <div class="course-reason">${reason}</div>
     </button>`;
   }).join("");
@@ -545,9 +548,10 @@ function openCourseSheet(c) {
   const d = lastOverview;
   const st = courseState(d || {});
   const [verdict, reason] = rateCourse(c, st);
+  const stats = courseStats(c);
   currentCourse = c;
   $("course-sheet-title").textContent = c.name;
-  $("course-sheet-sub").textContent = `${c.minutes}min · TSS 约 ${c.tss} · 判定：${verdict}`;
+  $("course-sheet-sub").textContent = `${stats.minutes}min · TSS 约 ${stats.tss} · 判定：${verdict}`;
   const steps = c.steps
     .map((s) => {
       const pw = s.ramp
@@ -598,7 +602,7 @@ if (courseWriteBtn) {
       name: currentCourse.name,
       type: "Ride",
       start_date_local: `${dateStr}T21:30:00`,
-      moving_time: currentCourse.minutes * 60,
+      moving_time: courseStats(currentCourse).minutes * 60,
       description: courseDescription(currentCourse),
       not_on_fitness_chart: true,
     };
@@ -626,7 +630,8 @@ if (courseAskBtn) {
     const st = courseState(lastOverview || {});
     const input = $("chat-input");
     if (input) {
-      input.value = `我想上「${currentCourse.name}」（${currentCourse.minutes}min，TSS 约 ${currentCourse.tss}）。按我今天的 Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) : "—"}h、本周 ${st.weekTss} TSS，帮我判断该不该上、功率要不要调。`;
+      const cs = courseStats(currentCourse);
+      input.value = `我想上「${currentCourse.name}」（${cs.minutes}min，TSS 约 ${cs.tss}）。按我今天的 Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) : "—"}h、本周 ${st.weekTss} TSS，帮我判断该不该上、功率要不要调。`;
       input.dispatchEvent(new Event("input"));
       input.focus();
     }
