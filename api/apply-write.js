@@ -25,14 +25,27 @@ export default async function handler(req, res) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("日期格式不对：" + w.start_date_local);
         const base = typeof w.description === "string" ? w.description.trim() : "";
         // 日历里只放 ICU 结构化课（每段一行），散文/来源标注一概不写进去
-        let structured = base
-          .split("\n")
-          .map((l) => l.trim())
-          .filter((l) => /^(#|-)/.test(l))
-          .join("\n");
-        // 只有文字、但带了 steps 的，按 steps 生成结构化行；两样都没有才拒绝
-        if (!structured && Array.isArray(w.steps) && w.steps.length) {
-          structured = workoutTextFromSteps(w.steps);
+        // 优先用 steps 重新生成 ICU 训练格式（MyWhoosh/码表只认这种结构）
+        let structured = Array.isArray(w.steps) && w.steps.length ? workoutTextFromSteps(w.steps) : "";
+        if (!structured) {
+          const lines = base.split("\n").map((l) => l.trim()).filter(Boolean);
+          const kept = [];
+          let pendingLabel = "";
+          for (const l of lines) {
+            if (/^-/.test(l)) {
+              if (pendingLabel) kept.push(pendingLabel);
+              pendingLabel = "";
+              kept.push(l);
+              continue;
+            }
+            // 只把紧挨动作行、短且不带句号的段名留下；散文与来源说明全部丢弃
+            if (l.length <= 24 && !/[。：:，,]/.test(l) && !/来源|icucoach|AI\s*教练/i.test(l)) {
+              pendingLabel = l;
+            } else {
+              pendingLabel = "";
+            }
+          }
+          structured = kept.join("\n");
         }
         if (!structured) {
           throw new Error(`「${w.name || "训练课"}」没有可解析的分段（steps 或 - 行），请让教练给出逐段结构再写`);

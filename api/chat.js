@@ -5,6 +5,7 @@ import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review
 import { appendMemory, memoryContext } from "../lib/memory.js";
 import { authError } from "../lib/auth.js";
 import { trainingHistory } from "../lib/history.js";
+import { workoutTextFromSteps } from "../lib/workout-text.js";
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
 function getEnv(req) {
@@ -102,6 +103,7 @@ const TOOLS = [
                 label: { type: "string", description: "段名，如 Warm-up / Sweet Spot 1 / Recovery" },
                 minutes: { type: "integer", description: "该段分钟数" },
                 pct: { type: "array", items: { type: "number" }, description: "强度 %FTP，单值写 [90,90]，递进写 [55,70]" },
+                cad: { type: "integer", description: "该段目标踏频 rpm，如 88" },
               },
               required: ["label", "minutes", "pct"],
             },
@@ -178,28 +180,6 @@ const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
 - 用户说出任何**训练约束**时必须 remember 一条（这类信息会进入课表与每日建议，不记就等于下次又要他重复一遍）：可用时段（如"白天午睡 13:00-15:30、晚上 21:30 后"）、单次时长上限、哪几天完全没空、身体问题（坐垫疼/膝痛/腰紧）、装备条件（没穿骑行裤、只有骑行台）、睡眠与工作安排；
 - 已标记（reviewed=true）的活动可以略过或只用于趋势对比，重点复盘未标记的。`;
 
-  // 模型有时给 steps 数组而不是 ICU 文本：这里转成 ICU 能解析的结构化行
-function workoutTextFromSteps(steps) {
-  if (!Array.isArray(steps) || !steps.length) return "";
-  return steps
-    .map((sg) => {
-      const mins = Number(sg && (sg.minutes != null ? sg.minutes : sg.min));
-      if (!Number.isFinite(mins) || mins <= 0) return "";
-      const raw = sg.pct != null ? sg.pct : sg.power != null ? sg.power : sg.percent;
-      let power = "";
-      if (Array.isArray(raw) && raw.length >= 2) {
-        const a = Number(raw[0]), b = Number(raw[1]);
-        power = Number.isFinite(a) && Number.isFinite(b) && a !== b ? `ramp ${a}-${b}%` : `${a}%`;
-      } else if (raw != null && Number.isFinite(Number(raw))) {
-        power = `${Number(raw)}%`;
-      }
-      if (!power) return "";
-      const label = sg.label ? `# ${String(sg.label).slice(0, 40)}\n` : "";
-      return `${label}- ${mins}m ${power}`;
-    })
-    .filter(Boolean)
-    .join("\n");
-}
 
 // 工具调用阶段：只跑“取数据”的轮次，最多 2 轮，且用低思考档位省时间
 // 返回 { msgs, answered }：answered 有值说明模型没调工具、已经直接答完了

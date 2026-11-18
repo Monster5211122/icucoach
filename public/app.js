@@ -534,16 +534,18 @@ function renderPlanCard(d, st) {
 }
 
 function courseDescription(c) {
-  const lines = [];
-  c.steps.forEach((s) => {
-    const pw = s.ramp
-      ? `ramp ${s.pct[0]}-${s.pct[1]}%`
-      : s.pct[0] === s.pct[1]
-      ? `${s.pct[0]}%`
-      : `${s.pct[0]}-${s.pct[1]}%`;
-    lines.push(`# ${s.label}`, `- ${s.min}m ${pw} ${s.cad}rpm`, "");
-  });
-  return lines.join("\n");
+  // ICU 原生训练格式：段名一行、动作行以 - 开头、段间空行；MyWhoosh 与码表靠这个解析
+  return c.steps
+    .map((s) => {
+      const pw = s.ramp
+        ? `ramp ${s.pct[0]}-${s.pct[1]}%`
+        : s.pct[0] === s.pct[1]
+        ? `${s.pct[0]}%`
+        : `${Math.round((s.pct[0] + s.pct[1]) / 2)}%`;
+      const cad = s.cad ? ` ${s.cad}rpm` : "";
+      return `${s.label}\n- ${s.min}m ${pw}${cad}`;
+    })
+    .join("\n\n");
 }
 
 function renderCourses() {
