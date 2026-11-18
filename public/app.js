@@ -541,7 +541,7 @@ function courseDescription(c) {
         ? `ramp ${s.pct[0]}-${s.pct[1]}%`
         : s.pct[0] === s.pct[1]
         ? `${s.pct[0]}%`
-        : `${Math.round((s.pct[0] + s.pct[1]) / 2)}%`;
+        : `${s.pct[0]}-${s.pct[1]}%`;
       const cad = s.cad ? ` ${s.cad}rpm` : "";
       return `${s.label}\n- ${s.min}m ${pw}${cad}`;
     })
