@@ -432,6 +432,7 @@ function courseState(d) {
     fitnessGap: (d && d.fitness_gap) || null,
     history: (d && d.history) || null,
     ignoreTime: !!loadSettings().ignoreTime,
+    hardDays: d && Number.isFinite(Number(d.last_hard_days)) ? Number(d.last_hard_days) : null,
   };
 }
 
@@ -445,6 +446,14 @@ function rateCourse(c, st) {
   const weakProof = h && h.test && h.test.longest_min != null
     ? `${h.test.date} FTP 测试最长工作段只有 ${h.test.longest_min}min`
     : (h && h.sustained ? `近 21 天 ≥88%FTP 最长只有 ${h.sustained.min}min` : "没有 20min 连续段");
+  // 距上次 IF≥95%（VO2/阈值）超过 6 天：摄氧缺口优先，直接推 VO2max
+  const hardDays = Number.isFinite(Number(st.hardDays)) ? Number(st.hardDays) : null;
+  if (hardDays != null && hardDays > 6) {
+    if (key === "vo2") return ["推荐", `距上次 IF≥95% 已 ${hardDays} 天，摄氧这一档该补（5×3 @110%）`];
+    if (key === "sweet") return ["可选", "甜区仍可做，但今天优先补摄氧缺口"];
+    if (key === "threshold") return ["可选", "阈值和 VO2 二选一；今天先把 ≥95% 的那档补上"];
+    if (key === "z2") return ["可选", "有氧底随时能补，今天先补摄氧"];
+  }
   // 恢复不足时仍先保恢复，不受短板排序影响
   if (level === "low") {
     if (key === "recovery") return ["推荐", "今天只该做这档：相比训练，恢复更值钱"];

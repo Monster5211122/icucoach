@@ -114,6 +114,22 @@ export default async function handler(req, res) {
     out.last_training_date = null;
   }
 
+  // 距上次高强度（IF≥95%，VO2/阈值课）几天：课程页与对话都按这条决定要不要推 VO2
+  out.last_hard_days = null;
+  let hardDate = null;
+  for (const a of acts) {
+    const d = a && a.start_date_local ? String(a.start_date_local).slice(0, 10) : null;
+    const ifv = Number(a && a.icu_intensity);
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !Number.isFinite(ifv) || ifv < 95) continue;
+    if (!hardDate || d > hardDate) hardDate = d;
+  }
+  if (hardDate) {
+    const nowLocal = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const hgap = Math.round((Date.parse(nowLocal) - Date.parse(hardDate)) / 86400000);
+    out.last_hard_days = Number.isFinite(hgap) ? hgap : null;
+    out.last_hard_date = hardDate;
+  }
+
   // 本周（周一至今）TSS 与已练天数：用于对话首页"教练现在看到什么"
   const nowLocalDate = new Date(Date.now() + 8 * 3600 * 1000);
   const dow = nowLocalDate.getUTCDay(); // 0=周日
