@@ -138,6 +138,8 @@ export default async function handler(req, res) {
         load,
         paired,
         status: paired ? "completed" : "planned",
+        // 事件是否被 ICU 画进 fitness 曲线（默认 true；本应用写入的计划是 false）
+        on_chart: e.not_on_fitness_chart === false,
         type: e.type || "",
       };
     });
@@ -151,7 +153,9 @@ export default async function handler(req, res) {
 
   // 今日已练 / 今日计划（未练）分开给前端
   out.today_completed = todayDone.map((w) => ({ name: w.name, load: w.load, paired: w.paired }));
-  out.today_planned = todayPlanned.map((w) => ({ name: w.name, load: w.load, id: w.id }));
+  out.today_planned = todayPlanned.map((w) => ({
+    name: w.name, load: w.load, id: w.id, on_chart: w.on_chart,
+  }));
   out.today_planned_load = todayPlanned.reduce((s, w) => s + w.load, 0);
 
   // 未来 14 天的计划（只含未完成的），用于提示“这些数字还没发生”
@@ -159,12 +163,32 @@ export default async function handler(req, res) {
     .filter((w) => w.status === "planned" && w.date > todayLocalDate && w.date <= daysAgo(-14))
     .sort((a, b) => (a.date < b.date ? -1 : 1))
     .slice(0, 10)
-    .map((w) => ({ id: w.id, date: w.date, name: w.name, load: w.load }));
+    .map((w) => ({ id: w.id, date: w.date, name: w.name, load: w.load, on_chart: w.on_chart }));
 
   // 完成的活动重算负荷，与 ICU 的 fitness 并排展示
   out.fitness_actual = actualLoad(acts, 182, todayLocalDate);
   // ICU 自己的数字（可能把计划课算进去），保留原字段不动
   if (out.fitness) out.fitness_planned_included = true;
+
+  // 不管计划是谁写的（本人、本应用、别的 AI、训练计划库），只要没被活动认领且仍在曲线上，就要报出来
+  const chartPlans = workouts.filter(
+    (w) => w.status === "planned" && w.on_chart && w.date >= todayLocalDate && w.date <= daysAgo(-14)
+  );
+  const chartPlanLoad = chartPlans.reduce((s, w) => s + w.load, 0);
+  out.plans_on_chart = {
+    count: chartPlans.length,
+    load: chartPlanLoad,
+    items: chartPlans.slice(0, 10).map((w) => ({ id: w.id, date: w.date, name: w.name, load: w.load })),
+  };
+  // 两套数字的差距：差距持续明显 = ICU 曲线被计划抬高（或历史窗口不同）
+  const gap = out.fitness && out.fitness_actual
+    ? {
+        ctl: Math.round((out.fitness.ctl - out.fitness_actual.ctl) * 10) / 10,
+        atl: Math.round((out.fitness.atl - out.fitness_actual.atl) * 10) / 10,
+        form: Math.round((out.fitness.form - out.fitness_actual.form) * 10) / 10,
+      }
+    : null;
+  out.fitness_gap = gap;
 
   // 不对前端暴露原始事件列表（里面可能有记忆便签）
   delete out.today_plan;

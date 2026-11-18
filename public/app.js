@@ -390,6 +390,8 @@ function courseState(d) {
     planToday: (d && d.today_planned) || [],
     planTodayLoad: (d && d.today_planned_load) || 0,
     upcoming: (d && d.upcoming_planned) || [],
+    plansOnChart: (d && d.plans_on_chart) || { count: 0, load: 0, items: [] },
+    fitnessGap: (d && d.fitness_gap) || null,
   };
 }
 
@@ -418,6 +420,51 @@ function rateCourse(c, st) {
   if (key === "threshold") return ["可选", "距上次 ≥1 天再上，别连着两天"];
   if (key === "vo2") return ["不推荐", "当前 Form 不适合，先把有氧量补上"];
   return ["可选", "按时间选"];
+}
+
+function renderPlanCard(d, st) {
+  const card = $("course-plan-card");
+  const box = $("course-plan-list");
+  const hint = $("course-plan-hint");
+  if (!card || !box) return;
+
+  const todayItems = (st.planToday || []).map((w) => ({
+    date: "今天", name: w.name, load: w.load, onChart: w.on_chart !== false,
+  }));
+  const futureItems = (st.upcoming || []).map((w) => ({
+    date: String(w.date || "").slice(5), name: w.name, load: w.load, onChart: w.on_chart !== false,
+  }));
+  const items = todayItems.concat(futureItems);
+
+  if (!items.length) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  box.innerHTML = items
+    .map(
+      (w) => `<div class="plan-item">
+        <div class="course-head">
+          <span class="course-name">${escapeHtml(w.name || "未命名")}</span>
+          <span class="course-verdict ${w.onChart ? "no" : "ok"}">${w.onChart ? "在曲线" : "已排除"}</span>
+        </div>
+        <div class="course-meta">${w.date} · ${w.load} TSS${w.onChart ? " · 会抬 CTL/ATL/Form" : ""}</div>
+      </div>`
+    )
+    .join("");
+
+  const onChart = items.filter((w) => w.onChart);
+  const onChartLoad = onChart.reduce((s, w) => s + (w.load || 0), 0);
+  let msg;
+  if (onChart.length) {
+    msg = `有 ${onChart.length} 条计划仍在 ICU 曲线里（共 ${onChartLoad} TSS），不管是谁写的，都还没发生——本页判定不按它们算。`;
+  } else {
+    msg = "计划都已排除在曲线外，ICU 的 CTL/ATL/Form 只由已完成活动产生。";
+  }
+  if (st.fitnessGap && Math.abs(st.fitnessGap.ctl) >= 3) {
+    msg += ` 当前 ICU 与已练重算差：CTL ${st.fitnessGap.ctl >= 0 ? "+" : ""}${st.fitnessGap.ctl}、ATL ${st.fitnessGap.atl >= 0 ? "+" : ""}${st.fitnessGap.atl}。`;
+  }
+  if (hint) hint.textContent = msg;
 }
 
 function wattsOf(pct, ftp) {
@@ -469,11 +516,16 @@ function renderCourses() {
   if (hint) {
     const reasonTxt = st.flags.length ? st.flags.map((f) => f.text).join("；") : `Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) + "h" : "—"}，没有红旗`;
     const lv = st.level === "low" ? "偏疲劳：只给恢复与短有氧" : st.level === "fresh" ? "有余量：可以上强度" : "正常：按剂量推进";
-    const tail = st.planToday.length
+    let tail = st.planToday.length
       ? `今天日历里的 ${st.planToday.map((w) => w.name).join("、")} 还只是计划（未练），别把它当已完成负荷；`
       : "";
+    if (st.plansOnChart && st.plansOnChart.count) {
+      tail += `另有 ${st.plansOnChart.count} 条未来计划仍在 ICU 曲线里（+${st.plansOnChart.load} TSS），不计入本页判定；`;
+    }
     hint.textContent = `${lv}。依据：${reasonTxt}。${tail}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
   }
+
+  renderPlanCard(d, st);
 
   const list = $("course-list");
   if (!list) return;
