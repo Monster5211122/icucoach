@@ -720,6 +720,7 @@ chatWrap.addEventListener("pointerdown", (e) => {
   lpTimer = setTimeout(() => {
     hideMsgOps();
     msg.classList.add("show-ops");
+    if (navigator.vibrate) navigator.vibrate(10);
   }, 450);
 });
 chatWrap.addEventListener("pointerup", clearLp);
@@ -1256,6 +1257,12 @@ $("btn-open-settings").addEventListener("click", () => switchView("settings"));
 $("btn-open-review").addEventListener("click", () => switchView("analyze"));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));
 $("btn-back-chat-2").addEventListener("click", () => switchView("chat"));
+
+// 点按轻震：手机上有实感，桌面浏览器会自动忽略
+document.addEventListener("pointerdown", (e) => {
+  const t = e.target.closest ? e.target.closest("button, .chip, .confirm-btn, .pick") : null;
+  if (t && !t.disabled && navigator.vibrate) navigator.vibrate(6);
+}, true);
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
