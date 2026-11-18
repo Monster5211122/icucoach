@@ -186,6 +186,7 @@ async function loadOverview(retry = 1) {
 
 function renderOverview(d) {
   if (typeof renderStatusStrip === "function") renderStatusStrip(d);
+  if (typeof renderCourses === "function") renderCourses();
 }
 
 // 今日建议：点顶栏「建议」→ 生成并写入 ICU 日历（便签），结果显示在弹层里
@@ -361,7 +362,7 @@ function courseState(d) {
   const monday = new Date(now);
   const dow = (now.getDay() + 6) % 7;
   monday.setDate(now.getDate() - dow);
-  const mondayStr = monday.toISOString().slice(0, 10);
+  const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
   const weekTss = acts
     .filter((a) => String(a.start_date_local || "") >= mondayStr && /ride/i.test(a.type || ""))
     .reduce((x, a) => x + (a.icu_training_load || 0), 0);
@@ -427,6 +428,11 @@ function courseDescription(c, ftp) {
 
 function renderCourses() {
   const d = lastOverview;
+  if (!d) {
+    const hint = $("course-state-hint");
+    if (hint) hint.textContent = "正在读取你的 ICU 数据… 若迟迟不动，点右上「刷新」；还没填 Key 就去「设置」。";
+    return;
+  }
   const st = courseState(d || {});
   const ftp = (d && d.profile && (d.profile.indoor_ftp || d.profile.ftp)) || 207;
 
@@ -561,7 +567,7 @@ if (courseAskBtn) {
 
 if ($("btn-open-courses")) {
   $("btn-open-courses").addEventListener("click", (e) =>
-    tapThen(e.currentTarget, () => { switchView("courses"); loadOverview(); })
+    tapThen(e.currentTarget, () => { switchView("courses"); renderCourses(); loadOverview(); })
   );
 }
 if ($("btn-back-chat-4")) $("btn-back-chat-4").addEventListener("click", () => switchView("chat"));
