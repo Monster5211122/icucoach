@@ -343,6 +343,41 @@ const COURSES = [
 
 // 时长与 TSS 一律由分段算出：总时长 = 各段之和，TSS ≈ Σ(IF²×100×小时)
 // 这样不会再出现“分段加起来 50 分钟、标题写 55 分钟”这种自相矛盾
+// 每一段练什么、怎么算达标：课程页与弹层都用这一份，避免只给"大概"
+function segBrief(seg, sys) {
+  const l = String(seg.label || "").toLowerCase();
+  if (l.includes("warm"))
+    return ["升温。前 5 分钟不追功率，让心率慢慢上来；踏频先稳住再抬", "起步能正常说话，8 分钟时呼吸变深但不乱"];
+  if (l.includes("cool"))
+    return ["收尾。逐步降到 50%，最后 2 分钟降到 60rpm 放松", "心率回落到 110 以下再下车"];
+  if (l.includes("recovery"))
+    return ["组间恢复。不是休息，也不要乱踩高踏频", "心率降到 110 左右再开下一段；降不下来就把下一段降 2%FTP"];
+  if (l.includes("sweet"))
+    return ["甜区：能说短句、呼吸平稳，练的是连续输出续航", "功率守住 ±3%，踏频不低于 80；掉功率 >5% 就降一档而不是硬顶"];
+  if (l.includes("threshold"))
+    return ["阈值：呼吸沉但可控，练的是顶住乳酸", "功率守住 ±3%，最后 1 分钟不掉；掉功率 >5% 或踏频掉到 75 以下就停这段"];
+  if (l.includes("vo2"))
+    return ["摄氧：只能蹦单词，代价大，一周最多一次", "每段功率不低于目标的 95%；跟不上就砍段数，不加休息硬撑"];
+  if (sys === "z2")
+    return ["有氧底：能完整说话，心率不是目标，功率才是", "功率守住 ±3%，全程能整句说话；说不出整句就是超了"];
+  if (sys === "recovery")
+    return ["纯恢复：只为促进血流，不产生训练负荷", "全程能唱歌，心率不上 110"];
+  return ["按标注强度执行", "功率守住 ±3%"];
+}
+
+// 主段结构一句话（列表里就能看出这节到底练几组几分钟，不用点开）
+function courseFocus(c) {
+  const works = c.steps.filter((x) => !/warm|cool|recovery/i.test(x.label));
+  if (!works.length) return `${c.steps.reduce((a, b) => a + b.min, 0)}min 全恢复`;
+  const mins = works.map((x) => x.min);
+  const pcts = works.map((x) => (x.pct[0] === x.pct[1] ? x.pct[0] : (x.pct[0] + x.pct[1]) / 2));
+  const sameMin = mins.every((m) => m === mins[0]);
+  const samePct = pcts.every((v) => v === pcts[0]);
+  if (works.length > 1 && sameMin && samePct) return `${works.length}×${mins[0]}min @${pcts[0]}%`;
+  const total = mins.reduce((a, b) => a + b, 0);
+  return `${total}min 主段${samePct ? ` @${pcts[0]}%` : ""}`;
+}
+
 function courseStats(c) {
   let minutes = 0;
   let tss = 0;
@@ -583,7 +618,7 @@ function renderCourses() {
         <span class="course-name">${c.name}</span>
         <span class="course-verdict ${cls}">${verdict}</span>
       </div>
-      <div class="course-meta">${stats.minutes}min · TSS 约 ${stats.tss} · ${c.sys === "recovery" ? "恢复" : c.sys === "z2" ? "有氧" : c.sys === "sweet" ? "甜区" : c.sys === "threshold" ? "阈值" : "摄氧"}</div>
+      <div class="course-meta">${stats.minutes}min · TSS 约 ${stats.tss} · ${courseFocus(c)} · ${c.sys === "recovery" ? "恢复" : c.sys === "z2" ? "有氧" : c.sys === "sweet" ? "甜区" : c.sys === "threshold" ? "阈值" : "摄氧"}</div>
       <div class="course-reason">${reason}</div>
     </button>`;
   }).join("");
@@ -598,21 +633,26 @@ function openCourseSheet(c) {
   currentCourse = c;
   $("course-sheet-title").textContent = c.name;
   $("course-sheet-sub").textContent = `${stats.minutes}min · TSS 约 ${stats.tss} · 判定：${verdict}`;
-  const steps = c.steps
-    .map((s) => {
-      const pw = s.ramp
-        ? `ramp ${s.pct[0]}-${s.pct[1]}%`
-        : s.pct[0] === s.pct[1]
-        ? `${s.pct[0]}%`
-        : `${s.pct[0]}-${s.pct[1]}%`;
-      return `- **${s.label}** ${s.min}min · ${pw} · ${s.cad}rpm`;
-    })
-    .join("\n");
+  let cursor = 0;
+  const rows = c.steps.map((s) => {
+    const from = cursor;
+    cursor += s.min;
+    const pw = s.ramp
+      ? `ramp ${s.pct[0]}-${s.pct[1]}%`
+      : s.pct[0] === s.pct[1]
+      ? `${s.pct[0]}%`
+      : `${s.pct[0]}-${s.pct[1]}%`;
+    const mid = s.pct[0] === s.pct[1] ? s.pct[0] : (s.pct[0] + s.pct[1]) / 2;
+    const segTss = Math.round(Math.pow(mid / 100, 2) * 100 * (s.min / 60));
+    const [purpose, pass] = segBrief(s, c.sys);
+    return `| ${s.label} | ${from}-${cursor}min | ${s.min} | ${pw} | ${s.cad}±5 | ${purpose} | ${pass} · 本段 TSS 约 ${segTss} |`;
+  });
+  const table = ["| 段 | 时间 | 时长 | 强度 | 踏频 | 这段练什么 | 达标线 |", "|---|---|---|---|---|---|---|"].concat(rows).join("\n");
   const basis = st.flags.length
     ? st.flags.map((f) => f.text).join("；")
     : `Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) : "—"}h、本周 ${st.weekTss} TSS`;
   $("course-sheet-body").innerHTML = renderMarkdown(
-    `**这节练什么**：${c.why}\n\n**结构（按 %FTP，不写瓦数）**\n${steps}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
+    `**这节练什么**：${c.why}\n\n**逐段结构（按 %FTP，不写瓦数）**\n${table}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
   );
   $("course-sheet-hint").textContent = "全程按 %FTP 写（不写瓦数），之后改 FTP 会自动跟着变。写入的是「计划」：只进日历，不进 CTL/ATL/Form 曲线，练完由活动本身产生负荷。";
   $("course-sheet").classList.remove("hidden");

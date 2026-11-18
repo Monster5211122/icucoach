@@ -154,7 +154,7 @@ const TOOLS = [
 const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
 你拥有五个工具，只在必要时调用（闲聊或一般咨询不要调用）：
 - 用户要求复盘某次/某段时间的训练时：先调用 list_activities 找出还没有复盘标记的活动；
-- 用 get_activity_detail 拉取该活动的深度数据，再给出复盘；
+- 用 get_activity_detail 拉取该活动的深度数据，再给出复盘；复盘必须按返回的 intervals **逐段**列（段号/类型/起止分钟/时长/平均功率与 NP/%FTP/心率区间/踏频/漂移），不许合并成"整体稳定""前后半程"这类概括；只有 intervals 为空才退回前后半程对比，并写明"本次没有分段数据"；
 - 每复盘完一个活动，调用 mark_reviewed 准备标记，并在回复末尾说明「已准备好标记，点下面的“确认写入 ICU”才会写回」；**绝不能说“已写入/已标记”**，因为工具只做暂存；
 - 用户问“今天怎么练/今天练什么”时，不要只说方向：按「判决（练/降档练/不练）→ 今天这一节（热身/主段/组间/放松，每段写确切分钟数、瓦数区间、踏频）→ 体感校准（RPE 与心率红线）→ 降一档 → 停的条件 → 为什么」给，读完他能直接上台骑。
 - 用户说“排这周课表/给我排几天”时：先把每天的课排好（按上面的时段、时长、强度两端分化、灰区占比规则），再调用 create_workouts 准备批量写入（同样要等用户点确认）；不要预排他练不了的天数，每周至少留 1-2 天恢复或休息。
@@ -254,7 +254,14 @@ export default async function handler(req, res) {
     if (name === "get_activity_detail") {
       // id 保持原样（如 i209987472），icu.js 会自动补 i 前缀；转成纯数字会 404
       const id = String(args.activity_id ?? "").trim();
-      const a = await icu.activity(id);
+      const [a, iv] = await Promise.all([
+        icu.activity(id),
+        icu.activityIntervals(id).catch(() => null),
+      ]);
+      // 详情接口不带分段，必须单独拉区间，否则复盘只能给整课数字
+      if (iv && Array.isArray(iv.icu_intervals) && iv.icu_intervals.length) {
+        a.icu_intervals = iv.icu_intervals;
+      }
       let streams = null;
       try {
         streams = await icu.activityStreams(id);
