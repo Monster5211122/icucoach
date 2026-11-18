@@ -457,7 +457,7 @@ function renderPlanCard(d, st) {
   const onChartLoad = onChart.reduce((s, w) => s + (w.load || 0), 0);
   let msg;
   if (onChart.length) {
-    msg = `有 ${onChart.length} 条计划仍在 ICU 曲线里（共 ${onChartLoad} TSS），不管是谁写的，都还没发生——本页判定不按它们算。`;
+    msg = `有 ${onChart.length} 条计划仍在 ICU 曲线里（共 ${onChartLoad} TSS），不管是谁写的，都还没发生——本页判定不按它们算。修正：在 ICU 打开该事件，取消「Show on fitness chart」，或在事件里设 not_on_fitness_chart=true。`;
   } else {
     msg = "计划都已排除在曲线外，ICU 的 CTL/ATL/Form 只由已完成活动产生。";
   }
