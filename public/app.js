@@ -1124,8 +1124,9 @@ async function sendChat(presetText, reuseLastUser = false) {
     // 流式：先建一条空气泡，边收边渲染，第一段字到了就把“正在思考”收掉
     const mi = chatMessages.length;
     chatMessages.push({ role: "assistant", content: "" });
-    if (typing.parentNode) typing.remove();
     renderChat();
+    // 先落一个「正在生成…」占位：首个字到达前气泡不会空着，让人以为没反应
+    paint();
     let pending = null;
     let errMsg = "";
     let raf = null;
@@ -1156,6 +1157,7 @@ async function sendChat(presetText, reuseLastUser = false) {
         let evt;
         try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
         if (evt.type === "delta" && evt.text) {
+          if (typing.parentNode) typing.remove();
           chatMessages[mi].content += evt.text;
           paint();
         } else if (evt.type === "done") {
@@ -1166,6 +1168,7 @@ async function sendChat(presetText, reuseLastUser = false) {
       }
     }
     clearTimeout(timer);
+    if (typing.parentNode) typing.remove();
 
     if (errMsg && !chatMessages[mi].content) throw new Error(errMsg);
     if (errMsg) chatMessages[mi].content += "\n\n（生成中断：" + errMsg + "）";
