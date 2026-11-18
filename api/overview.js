@@ -83,6 +83,9 @@ export default async function handler(req, res) {
     })
   );
 
+  // 活动列表先取出来：下面的训练史与空窗都要用（不能在使用之后才 const，否则 TDZ 报错被吞成 null）
+  const acts = Array.isArray(out.activities) ? out.activities : [];
+
   // 持续能力（测试最长工作段 / 近21天最长高强段）：课程推荐要用它，不能只看当天 Form
   try {
     out.history = await trainingHistory(icu, acts, out.profile);
@@ -93,7 +96,6 @@ export default async function handler(req, res) {
 
   // 距上次训练天数（空窗提醒用）：按日期差算（UTC+8），不能用小时差向下取整，
   // 否则晚上训练在次日白天会少算一天（前天训练被当成昨天）
-  const acts = Array.isArray(out.activities) ? out.activities : [];
   let lastDate = null;
   for (const a of acts) {
     const d = a && a.start_date_local ? String(a.start_date_local).slice(0, 10) : null;

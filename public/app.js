@@ -441,6 +441,7 @@ function rateCourse(c, st) {
   const cMinutes = courseStats(c).minutes;
   const h = st.history;
   const weak = !!(h && h.weak_sustained);
+  const weakUnknown = !h; // 历史没取到：不能假装短板不存在
   const weakProof = h && h.test && h.test.longest_min != null
     ? `${h.test.date} FTP 测试最长工作段只有 ${h.test.longest_min}min`
     : (h && h.sustained ? `近 21 天 ≥88%FTP 最长只有 ${h.sustained.min}min` : "没有 20min 连续段");
@@ -452,10 +453,12 @@ function rateCourse(c, st) {
     return ["不推荐", "强度课会在恢复不足时加深疲劳"];
   }
   // 解除限制 = 不看时段与时长，改按短板选课型；关闭时按常规状态排，3×8 阈值照常可用
-  if (st.ignoreTime && weak) {
+  if (st.ignoreTime && (weak || weakUnknown)) {
     if (key === "sweet")
-      return ["推荐", `解除限制：短板是 20 分钟续航（${weakProof}），今天用 2×20 甜区针对性补，不加难度`];
-    if (key === "threshold") return ["不推荐", `8 分钟重复补不到 20min 续航（${weakProof}），等能连续 20min 再上阈值`];
+      return ["推荐", weak ? `解除限制：短板是 20 分钟续航（${weakProof}），今天用 2×20 甜区针对性补，不加难度` : "解除限制：历史短板这次没取到（点刷新重试），先按 20 分钟续航保守补，不加难度"];
+    if (key === "threshold") return weak
+      ? ["不推荐", `8 分钟重复补不到 20min 续航（${weakProof}），等能连续 20min 再上阈值`]
+      : ["可选", "历史短板没取到，阈值先别当主课；点刷新后我再按真实短板排"];
     if (key === "vo2") return ["可选", "摄氧不是当前短板，优先级低于甜区长段"];
     if (key === "z2" && cMinutes === 85) return ["可选", "有氧底要保，但今天优先级低于甜区长段"];
     if (key === "z2" && cMinutes >= 120) return ["可选", "有氧底可以补，但今天短板是 20 分钟续航，先甜区"];
@@ -589,7 +592,12 @@ function renderCourses() {
     const histTxt = h
       ? `持续能力：${h.test ? `${h.test.date} 测试最长工作段 ${h.test.longest_min != null ? h.test.longest_min + "min" : "无 WORK 段"}` : "近 45 天没做测试"}${h.sustained ? `；近 21 天 ≥88%FTP 最长连续 ${h.sustained.min}min` : "；近 21 天没有 ≥88%FTP 连续段"}。${h.weak_sustained ? "判定：20 分钟续航是短板，甜区长段优先。" : ""}`
       : "";
-    hint.textContent = `${lv}。依据：${reasonTxt}。${histTxt}${tail}${st.ignoreTime ? "解除限制已开：不看时段与时长，改按短板选课型，难度不加大。" : ""}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
+    const histNote = st.history
+      ? (st.history.weak_sustained
+          ? `短板依据：${st.history.test?.longest_min != null ? `测试最长 ${st.history.test.longest_min}min` : ""}${st.history.sustained?.min != null ? ` / 近21天 ${st.history.sustained.min}min` : ""}。`
+          : "持续能力够用（测试与近 21 天都有 ≥20min 连续段）。")
+      : "历史短板这次没取到，点右上「刷新」重试。";
+    hint.textContent = `${lv}。依据：${reasonTxt}。${histTxt}${tail}${histNote}${st.ignoreTime ? "解除限制已开：不看时段与时长，改按短板选课型，难度不加大。" : ""}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
   }
 
   renderPlanCard(d, st);
