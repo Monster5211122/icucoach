@@ -186,35 +186,6 @@ async function loadOverview(retry = 1) {
 
 function renderOverview(d) {
   if (typeof renderStatusStrip === "function") renderStatusStrip(d);
-  const f = d.fitness || {};
-  $("stat-ctl").textContent = f.ctl ?? "—";
-  $("stat-atl").textContent = f.atl ?? "—";
-  const form = f.form;
-  const formEl = $("stat-form");
-  formEl.textContent = form ?? "—";
-  formEl.className = "stat-num" + (typeof form === "number" ? (form >= 0 ? " form-pos" : " form-neg") : "");
-
-  $("stat-ftp").textContent = d.profile?.ftp ? d.profile.ftp + " W" : "—";
-  $("stat-weight").textContent = d.profile?.weight ? d.profile.weight + " kg" : "—";
-
-  const w = d.wellness && d.wellness[0];
-  $("stat-readiness").textContent = w?.readiness != null ? w.readiness + "%" : "—";
-  $("stat-rhr").textContent = w?.restingHR != null ? w.restingHR + " bpm" : "—";
-
-  const lastEl = $("stat-last");
-  if (d.empty_days == null) {
-    lastEl.textContent = "—";
-  } else {
-    const date = d.last_training_date ? d.last_training_date.slice(5).replace("-", "/") + " " : "";
-    lastEl.textContent =
-      date + "· 空窗 " + d.empty_days + " 天" + (d.empty_days >= 2 ? "（别断练）" : "");
-  }
-
-  const errs = ["profile", "fitness", "wellness", "activities"].filter((k) => d[k + "_error"]);
-  $("overview-hint").textContent = errs.length
-    ? "部分数据获取失败：" + d[errs[0] + "_error"]
-    : "数据来自 Intervals.icu";
-
   renderDaily(d.daily);
 }
 
@@ -238,8 +209,27 @@ function renderDaily(daily) {
     }
     $("daily-hint").classList.remove("hidden");
     if (btn) btn.textContent = "生成今日建议";
+    setDailyOpen(true); // 没有建议时直接摊开，让人看到「怎么生成」
   }
 }
+
+// 今日建议折叠卡片
+function setDailyOpen(open) {
+  const box = $("daily-text");
+  const hint = $("daily-hint");
+  const chev = $("daily-chevron");
+  const toggle = $("btn-daily-toggle");
+  if (!box) return;
+  box.classList.toggle("hidden", !open);
+  if (hint && !hint.dataset.hasText) hint.classList.toggle("hidden", !open);
+  else if (hint) hint.classList.toggle("hidden", !open);
+  if (chev) chev.textContent = open ? "▾" : "▸";
+  if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+$("btn-daily-toggle").addEventListener("click", () => {
+  const box = $("daily-text");
+  setDailyOpen(box.classList.contains("hidden"));
+});
 
 let dailyGenerating = false;
 async function ensureDaily() {
@@ -248,6 +238,7 @@ async function ensureDaily() {
   try {
     await api("/api/daily-suggestion", { method: "POST", body: "{}" });
     renderOverview(await api("/api/overview"));
+    setDailyOpen(true);
   } catch (e) {
     $("daily-hint").textContent = "今日建议生成失败：" + e.message;
     $("daily-hint").classList.remove("hidden");
@@ -265,6 +256,7 @@ $("btn-daily-regen").addEventListener("click", async () => {
       body: JSON.stringify({ force: hasText }),
     });
     renderOverview(await api("/api/overview"));
+    setDailyOpen(true);
     toast("已重新生成今日建议");
   } catch (e) {
     toast("生成失败：" + e.message);
@@ -1276,10 +1268,6 @@ function tapThen(el, fn, delay = 110) {
   setTimeout(() => { el.style.filter = ""; }, 160);
   setTimeout(fn, delay);
 }
-$("btn-open-overview").addEventListener("click", (e) =>
-  tapThen(e.currentTarget, () => { switchView("overview"); loadOverview(); })
-);
-$("btn-back-chat-3").addEventListener("click", () => switchView("chat"));
 $("btn-open-settings").addEventListener("click", (e) => tapThen(e.currentTarget, () => switchView("settings")));
 $("btn-open-review").addEventListener("click", (e) => tapThen(e.currentTarget, () => switchView("analyze")));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));

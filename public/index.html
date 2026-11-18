@@ -17,7 +17,6 @@
     <div class="topbar-title">ICU AI 教练</div>
     <div class="topbar-actions">
       <button class="ghost-btn" id="btn-refresh" aria-label="刷新状态">刷新</button>
-      <button class="ghost-btn" id="btn-open-overview" aria-label="概览">概览</button>
       <button class="ghost-btn" id="btn-open-review" aria-label="复盘">复盘</button>
       <button class="ghost-btn" id="btn-open-settings" aria-label="设置">设置</button>
     </div>
@@ -39,6 +38,16 @@
         <span class="ss-toggle-text">解除限制</span>
       </label>
     </div>
+    <section class="daily-inline" id="daily-inline">
+      <div class="daily-head">
+        <button class="daily-toggle" id="btn-daily-toggle" aria-expanded="false">
+          <span id="daily-chevron">▸</span> 今日建议 <span class="daily-date" id="daily-date"></span>
+        </button>
+        <button class="ghost-btn" id="btn-daily-regen">生成今日建议</button>
+      </div>
+      <div class="markdown hidden" id="daily-text"></div>
+      <div class="hint hidden" id="daily-hint"></div>
+    </section>
     <div class="chat-hint" id="chat-hint">直接说就行：今天怎么练、复盘最近那节、这周怎么排。教练会先看你的真实数据再回答；长按你的消息可以撤回或修改。</div>
     <div class="chat-wrap" id="chat-wrap"></div>
     <div class="chips checkin" id="chat-checkin">
@@ -75,34 +84,6 @@
         <div class="hint" id="think-note"></div>
       </div>
     </div>
-  </main>
-
-  <main class="view" id="view-overview">
-    <button class="ghost-btn" id="btn-back-chat-3" style="margin-bottom:10px">← 返回对话</button>
-    <section class="card">
-      <div class="daily-head">
-        <h2 class="card-title">今日建议 <span class="daily-date" id="daily-date"></span></h2>
-        <button class="ghost-btn" id="btn-daily-regen">重新生成</button>
-      </div>
-      <div class="markdown" id="daily-text">加载中…</div>
-      <div class="hint hidden" id="daily-hint"></div>
-    </section>
-    <section class="card">
-      <h2 class="card-title">当前状态</h2>
-      <div class="grid-3" id="fitness-grid">
-        <div class="stat"><div class="stat-num" id="stat-ctl">—</div><div class="stat-label">体能 CTL</div></div>
-        <div class="stat"><div class="stat-num" id="stat-atl">—</div><div class="stat-label">疲劳 ATL</div></div>
-        <div class="stat"><div class="stat-num" id="stat-form">—</div><div class="stat-label">状态 Form</div></div>
-      </div>
-      <div class="kv">
-        <div class="kv-row"><span>FTP</span><b id="stat-ftp">—</b></div>
-        <div class="kv-row"><span>体重</span><b id="stat-weight">—</b></div>
-        <div class="kv-row"><span>Readiness</span><b id="stat-readiness">—</b></div>
-        <div class="kv-row"><span>静息心率</span><b id="stat-rhr">—</b></div>
-        <div class="kv-row"><span>距上次训练</span><b id="stat-last">—</b></div>
-      </div>
-      <div class="hint" id="overview-hint"></div>
-    </section>
   </main>
 
   <main class="view hidden" id="view-analyze">
