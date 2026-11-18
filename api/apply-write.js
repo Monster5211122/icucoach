@@ -1,5 +1,6 @@
 import { createIcuClient } from "../lib/icu.js";
 import { markReviewed } from "../lib/review.js";
+import { workoutTextFromSteps } from "../lib/workout-text.js";
 import { authError } from "../lib/auth.js";
 
 // 用户在对话里点「确认写入 ICU」后，才真正落库
@@ -24,13 +25,17 @@ export default async function handler(req, res) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("日期格式不对：" + w.start_date_local);
         const base = typeof w.description === "string" ? w.description.trim() : "";
         // 日历里只放 ICU 结构化课（每段一行），散文/来源标注一概不写进去
-        const structured = base
+        let structured = base
           .split("\n")
           .map((l) => l.trim())
           .filter((l) => /^(#|-)/.test(l))
           .join("\n");
+        // 只有文字、但带了 steps 的，按 steps 生成结构化行；两样都没有才拒绝
+        if (!structured && Array.isArray(w.steps) && w.steps.length) {
+          structured = workoutTextFromSteps(w.steps);
+        }
         if (!structured) {
-          throw new Error(`「${w.name || "训练课"}」没有结构化分段，拒绝以文本形式写入日历`);
+          throw new Error(`「${w.name || "训练课"}」没有可解析的分段（steps 或 - 行），请让教练给出逐段结构再写`);
         }
         return {
           name: String(w.name || "训练课").slice(0, 120),

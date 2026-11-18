@@ -1041,12 +1041,17 @@ async function confirmWrite(idx) {
     for (const p of items) {
       const d = await api("/api/apply-write", { method: "POST", body: JSON.stringify(p) });
       if (p.kind === "workouts") {
-        results.push(`已写入 ${d.written.length} 节：` + d.written.map((w) => `${w.name}（${w.date}，TSS ${w.tss ?? "?"}）`).join("、"));
+        results.push(...d.written.map((w) => `${w.date} ${w.name}（TSS ${w.tss ?? "?"}）`));
+        if (d.verified === false) results.verifiedMissing = true;
       } else {
         results.push(d.changed ? "已写回「AI复盘已完成」标记" : "已经是已复盘状态");
       }
     }
-    m.content += "\n\n**写入结果**\n\n" + results.map((r) => "- " + r).join("\n");
+    const oneLine =
+      "已写入 ICU：" +
+      results.join("、") +
+      (results.verifiedMissing ? "（回读没查到，稍后刷新看）" : "（已回读确认）");
+    m.content += "\n\n" + oneLine;
     m.pendingDone = true;
     toast("已写入 ICU");
   } catch (e) {
