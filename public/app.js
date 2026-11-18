@@ -473,7 +473,8 @@ function rateCourse(c, st) {
   }
   // normal
   if (key === "z2" && cMinutes === 85) return ["推荐", "剂量与当前 CTL 最匹配：加时长不加功率"];
-  if (key === "sweet") return ["推荐", "有刺激但不深，适合正常状态"];
+  if (key === "sweet")
+    return ["可选", "有刺激但不深；想练强度可以选，但它不是常规首选（补 20min 续航才用）"];
   if (key === "z2" && cMinutes <= 60) return ["可选", "时间不够就用这档"];
   if (key === "z2" && cMinutes >= 120)
     return st.ignoreTime
@@ -537,7 +538,7 @@ function courseDescription(c) {
       : s.pct[0] === s.pct[1]
       ? `${s.pct[0]}%`
       : `${s.pct[0]}-${s.pct[1]}%`;
-    lines.push(s.label, `- ${s.min}m ${pw} ${s.cad}rpm`, "");
+    lines.push(`# ${s.label}`, `- ${s.min}m ${pw} ${s.cad}rpm`, "");
   });
   return lines.join("\n");
 }
@@ -604,8 +605,12 @@ function renderCourses() {
 
   const list = $("course-list");
   if (!list) return;
-  list.innerHTML = COURSES.map((c) => {
+  const rank = { 推荐: 0, 可选: 1, 不推荐: 2 };
+  const rows = COURSES.map((c, i) => {
     const [verdict, reason] = rateCourse(c, st);
+    return { c, verdict, reason, i };
+  }).sort((a, b) => rank[a.verdict] - rank[b.verdict] || a.i - b.i);
+  list.innerHTML = rows.map(({ c, verdict, reason }) => {
     const stats = courseStats(c);
     const cls = verdict === "推荐" ? "ok" : verdict === "可选" ? "mid" : "no";
     return `<button class="course-item ${cls}" data-id="${c.id}">
@@ -674,7 +679,7 @@ if (courseIgnore) {
     saveSettings(s);
     if (typeof syncChatIgnore === "function") syncChatIgnore();
     if (typeof syncPrefs === "function") syncPrefs();
-    toast(courseIgnore.checked ? "解除限制已开：只按短板给足剂量" : "解除限制已关：按时段与恢复排");
+    toast(courseIgnore.checked ? "解除限制已开：不看时段与时长，改按短板选课型" : "解除限制已关：按时段与恢复排");
     if (lastOverview) renderOverview(lastOverview);
   });
 }
