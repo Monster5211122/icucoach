@@ -123,7 +123,11 @@ function inline(s) {
 function switchView(name) {
   document.body.classList.toggle("chat-mode", name === "chat");
   document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
-  $("view-" + name).classList.remove("hidden");
+  const target = $("view-" + name);
+  target.classList.remove("hidden");
+  target.classList.remove("view-in");
+  void target.offsetWidth;
+  target.classList.add("view-in");
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === name)
   );
@@ -1253,8 +1257,17 @@ $("btn-refresh").addEventListener("click", async () => {
     btn.classList.remove("busy");
   }
 });
-$("btn-open-settings").addEventListener("click", () => switchView("settings"));
-$("btn-open-review").addEventListener("click", () => switchView("analyze"));
+function tapThen(el, fn, delay = 110) {
+  if (!el) return fn();
+  el.classList.remove("tap-pop");
+  void el.offsetWidth;
+  el.classList.add("tap-pop");
+  el.style.filter = "brightness(1.35)";
+  setTimeout(() => { el.style.filter = ""; }, 160);
+  setTimeout(fn, delay);
+}
+$("btn-open-settings").addEventListener("click", (e) => tapThen(e.currentTarget, () => switchView("settings")));
+$("btn-open-review").addEventListener("click", (e) => tapThen(e.currentTarget, () => switchView("analyze")));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));
 $("btn-back-chat-2").addEventListener("click", () => switchView("chat"));
 

@@ -437,3 +437,10 @@ button:active, .ghost-btn:active, .chip:active, .confirm-btn:active,
 .tap-pop { animation: tapPop .18s ease-out; }
 button:disabled, .chip:disabled { filter: none; transform: none; box-shadow: none; }
 .ghost-btn.busy { opacity: .75; }
+
+/* 页面切换淡入，避免瞬间切换导致“点了没反应”的错觉 */
+.view-in { animation: viewIn .2s ease-out; }
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
