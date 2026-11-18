@@ -215,6 +215,15 @@ export default async function handler(req, res) {
           .forEach((e) => { planMap[String(e.start_date_local).slice(0, 10)] = e; });
       } catch { /* 计划拿不到就按没有计划处理 */ }
 
+      // 区间级数据（单课漂移要用区间口径，活动级只作跨课比较）
+      if (acts.length === 1) {
+        try {
+          const iv = await icu.activityIntervals(acts[0].id);
+          const list = (iv && iv.icu_intervals) || [];
+          if (list.length) acts[0].__intervals = list;
+        } catch { /* 拿不到就不标区间级 */ }
+      }
+
       const prompt =
         acts.length === 1
           ? buildSingleAnalyzePrompt(
