@@ -408,15 +408,32 @@ body.chat-mode #chat-chips { padding: 6px 0 0; }
 
 /* 全局按压反馈：点下去必须有反应（缩放 + 提亮 + 轻微阴影） */
 button, .ghost-btn, .chip, .confirm-btn, .think-btn, .msg-op, .pick, .seg-btn {
-  transition: transform .09s ease, filter .12s ease, box-shadow .12s ease;
+  position: relative; overflow: hidden;
+  transition: transform .12s cubic-bezier(.2,.8,.3,1), filter .12s ease, box-shadow .12s ease;
   touch-action: manipulation;
   -webkit-user-select: none; user-select: none;
 }
 button:active, .ghost-btn:active, .chip:active, .confirm-btn:active,
 .think-btn:active, .msg-op:active, .pick:active, .seg-btn:active {
-  transform: scale(.955);
-  filter: brightness(1.22);
-  box-shadow: 0 0 0 2px rgba(45,212,191,.25);
+  transform: scale(.92);
+  filter: brightness(1.35) saturate(1.2);
+  box-shadow: 0 0 0 3px rgba(45,212,191,.45), 0 6px 18px rgba(45,212,191,.25);
 }
+
+/* 点按涟漪：从手指位置扩散，最直观的“我点到了” */
+.tap-ripple {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(255,255,255,.55) 0%, rgba(45,212,191,.35) 45%, rgba(45,212,191,0) 70%);
+  transform: scale(0); opacity: .9;
+  animation: tapRipple .5s ease-out forwards;
+}
+@keyframes tapRipple {
+  from { transform: scale(0); opacity: .95; }
+  to { transform: scale(1); opacity: 0; }
+}
+@keyframes tapPop {
+  0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); }
+}
+.tap-pop { animation: tapPop .18s ease-out; }
 button:disabled, .chip:disabled { filter: none; transform: none; box-shadow: none; }
 .ghost-btn.busy { opacity: .75; }

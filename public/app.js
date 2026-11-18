@@ -1258,10 +1258,32 @@ $("btn-open-review").addEventListener("click", () => switchView("analyze"));
 $("btn-back-chat").addEventListener("click", () => switchView("chat"));
 $("btn-back-chat-2").addEventListener("click", () => switchView("chat"));
 
-// 点按轻震：手机上有实感，桌面浏览器会自动忽略
+// 点按反馈：涟漪 + 轻震（不支持的设备自动忽略）
 document.addEventListener("pointerdown", (e) => {
-  const t = e.target.closest ? e.target.closest("button, .chip, .confirm-btn, .pick") : null;
-  if (t && !t.disabled && navigator.vibrate) navigator.vibrate(6);
+  const t = e.target.closest
+    ? e.target.closest("button, .chip, .confirm-btn, .think-btn, .pick, .ghost-btn")
+    : null;
+  if (!t || t.disabled) return;
+  if (navigator.vibrate) navigator.vibrate(6);
+
+  // 涟漪：以手指落点为中心扩散，看得见才叫“点到了”
+  const r = t.getBoundingClientRect();
+  const size = Math.max(r.width, r.height) * 1.4;
+  const x = (e.clientX || r.left + r.width / 2) - r.left;
+  const y = (e.clientY || r.top + r.height / 2) - r.top;
+  const dot = document.createElement("span");
+  dot.className = "tap-ripple";
+  dot.style.width = dot.style.height = size + "px";
+  dot.style.left = x - size / 2 + "px";
+  dot.style.top = y - size / 2 + "px";
+  t.appendChild(dot);
+  setTimeout(() => dot.remove(), 520);
+
+  // 松手回弹一下，反馈更明确
+  t.classList.remove("tap-pop");
+  void t.offsetWidth;
+  t.classList.add("tap-pop");
+  setTimeout(() => t.classList.remove("tap-pop"), 200);
 }, true);
 
 if ("serviceWorker" in navigator) {
