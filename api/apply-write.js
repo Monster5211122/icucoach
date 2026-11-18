@@ -50,12 +50,24 @@ export default async function handler(req, res) {
         if (!structured) {
           throw new Error(`「${w.name || "训练课"}」没有可解析的分段（steps 或 - 行），请让教练给出逐段结构再写`);
         }
+        // 保留用户/前端给的时段（默认 21:30），不要一律抹成 00:00
+        const raw = String(w.start_date_local || "");
+        const timePart = /T(\d{2}:\d{2})(?::\d{2})?/.exec(raw);
+        const hhmm = timePart ? timePart[1] + ":00" : "21:30:00";
+        // 时长按 steps 实际求和，避免 3x 之类没展开时对不上
+        let seconds = Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : 0;
+        if (Array.isArray(w.steps) && w.steps.length) {
+          seconds = w.steps.reduce((sum, sg) => {
+            const m = Number(sg && (sg.minutes != null ? sg.minutes : sg.min));
+            return sum + (Number.isFinite(m) && m > 0 ? m * 60 : 0);
+          }, 0);
+        }
         return {
           name: String(w.name || "训练课").slice(0, 120),
           type: w.type === "Rest" ? "Rest" : "Ride",
-          start_date_local: date + "T00:00:00",
+          start_date_local: date + "T" + hhmm,
           description: structured,
-          moving_time: Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : null,
+          moving_time: seconds > 0 ? seconds : null,
         };
       });
       const created = await icu.writeWorkouts(workouts);

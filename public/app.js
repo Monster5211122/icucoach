@@ -286,9 +286,9 @@ const COURSES = [
     why: "甜区（88-92% FTP），性价比最高的阈值下刺激。",
     steps: [
       { label: "Warm-up", min: 12, pct: [50, 70], cad: 90, ramp: true },
-      { label: "Sweet Spot 1", min: 20, pct: [90, 90], cad: 88 },
+      { label: "Sweet Spot 1", min: 20, pct: [92, 92], cad: 86 },
       { label: "Recovery", min: 5, pct: [55, 55], cad: 80 },
-      { label: "Sweet Spot 2", min: 20, pct: [90, 90], cad: 88 },
+      { label: "Sweet Spot 2", min: 20, pct: [92, 92], cad: 86 },
       { label: "Cool-down", min: 13, pct: [50, 50], cad: 80 },
     ],
   },
