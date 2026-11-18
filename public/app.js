@@ -455,9 +455,10 @@ function rateCourse(c, st) {
   }
   // 距上次 IF≥95% 超过 6 天 + 实际状态够（Form ≥ -15 且睡眠 ≥6.5h，未触发低恢复红旗）：才直推 VO2max
   const hardDays = Number.isFinite(Number(st.hardDays)) ? Number(st.hardDays) : null;
-  const stateOk = (st.form == null || st.form >= -15) && (st.sleep == null || st.sleep >= 6.5);
+  // Form 不是硬门槛：只看睡眠与红旗（红旗已由 level=low 拦掉）
+  const stateOk = st.sleep == null || st.sleep >= 6.5;
   if (hardDays != null && hardDays > 6 && stateOk) {
-    if (key === "vo2") return ["推荐", `距上次 IF≥95% 已 ${hardDays} 天，且状态够（Form ${Math.round(st.form ?? 0)}），摄氧这一档该补（5×3 @110%）`];
+    if (key === "vo2") return ["推荐", `距上次 IF≥95% 已 ${hardDays} 天，睡眠 ${st.sleep != null ? st.sleep.toFixed(1) + "h" : "正常"}、无红旗，摄氧这一档该补（5×3 @110%）`];
     if (key === "sweet") return ["可选", "甜区仍可做，但今天优先补摄氧缺口"];
     if (key === "threshold") return ["可选", "阈值和 VO2 二选一；今天先把 ≥95% 的那档补上"];
     if (key === "z2") return ["可选", "有氧底随时能补，今天先补摄氧"];
