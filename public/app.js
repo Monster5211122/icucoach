@@ -514,7 +514,7 @@ function openCourseSheet(c) {
   $("course-sheet-body").innerHTML = renderMarkdown(
     `**这节练什么**：${c.why}\n\n**结构（室内 FTP ${ftp}W）**\n${steps}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
   );
-  $("course-sheet-hint").textContent = "功率按 %FTP 写入 ICU，之后改 FTP 会自动跟着变。注意：写进去的是「计划」，会进 ICU 的 CTL/ATL 曲线，但不等于已完成——本页的 Form 只按已完成活动算。";
+  $("course-sheet-hint").textContent = "功率按 %FTP 写入 ICU，之后改 FTP 会自动跟着变。写入的是「计划」：只进日历，不进 CTL/ATL/Form 曲线，练完由活动本身产生负荷。";
   $("course-sheet").classList.remove("hidden");
 }
 
@@ -552,7 +552,7 @@ if (courseWriteBtn) {
       start_date_local: `${dateStr}T21:30:00`,
       moving_time: currentCourse.minutes * 60,
       description: courseDescription(currentCourse, ftp),
-      not_on_fitness_chart: !!($("course-no-chart") && $("course-no-chart").checked),
+      not_on_fitness_chart: true,
     };
     if (!confirm(`把「${currentCourse.name}」写进 ${dateStr} 21:30 的 ICU 日历吗？`)) return;
     courseWriteBtn.disabled = true;
