@@ -467,17 +467,14 @@ function renderPlanCard(d, st) {
   if (hint) hint.textContent = msg;
 }
 
-function wattsOf(pct, ftp) {
-  const v = Math.round((pct / 100) * ftp);
-  return v;
-}
-
-function courseDescription(c, ftp) {
+function courseDescription(c) {
   const lines = [];
   c.steps.forEach((s) => {
-    const lo = wattsOf(s.pct[0], ftp);
-    const hi = wattsOf(s.pct[1], ftp);
-    const pw = s.ramp ? `ramp ${s.pct[0]}-${s.pct[1]}%` : s.pct[0] === s.pct[1] ? `${s.pct[0]}%` : `${s.pct[0]}-${s.pct[1]}%`;
+    const pw = s.ramp
+      ? `ramp ${s.pct[0]}-${s.pct[1]}%`
+      : s.pct[0] === s.pct[1]
+      ? `${s.pct[0]}%`
+      : `${s.pct[0]}-${s.pct[1]}%`;
     lines.push(s.label, `- ${s.min}m ${pw} ${s.cad}rpm`, "");
   });
   return lines.join("\n");
@@ -547,16 +544,17 @@ let currentCourse = null;
 function openCourseSheet(c) {
   const d = lastOverview;
   const st = courseState(d || {});
-  const ftp = (d && d.profile && (d.profile.indoor_ftp || d.profile.ftp)) || 207;
   const [verdict, reason] = rateCourse(c, st);
   currentCourse = c;
   $("course-sheet-title").textContent = c.name;
   $("course-sheet-sub").textContent = `${c.minutes}min · TSS 约 ${c.tss} · 判定：${verdict}`;
   const steps = c.steps
     .map((s) => {
-      const lo = wattsOf(s.pct[0], ftp);
-      const hi = wattsOf(s.pct[1], ftp);
-      const pw = s.pct[0] === s.pct[1] ? `${lo}W（${s.pct[0]}%）` : `${lo}-${hi}W（${s.pct[0]}-${s.pct[1]}%）`;
+      const pw = s.ramp
+        ? `ramp ${s.pct[0]}-${s.pct[1]}%`
+        : s.pct[0] === s.pct[1]
+        ? `${s.pct[0]}%`
+        : `${s.pct[0]}-${s.pct[1]}%`;
       return `- **${s.label}** ${s.min}min · ${pw} · ${s.cad}rpm`;
     })
     .join("\n");
@@ -564,9 +562,9 @@ function openCourseSheet(c) {
     ? st.flags.map((f) => f.text).join("；")
     : `Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) : "—"}h、本周 ${st.weekTss} TSS`;
   $("course-sheet-body").innerHTML = renderMarkdown(
-    `**这节练什么**：${c.why}\n\n**结构（室内 FTP ${ftp}W）**\n${steps}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
+    `**这节练什么**：${c.why}\n\n**结构（按 %FTP，不写瓦数）**\n${steps}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
   );
-  $("course-sheet-hint").textContent = "功率按 %FTP 写入 ICU，之后改 FTP 会自动跟着变。写入的是「计划」：只进日历，不进 CTL/ATL/Form 曲线，练完由活动本身产生负荷。";
+  $("course-sheet-hint").textContent = "全程按 %FTP 写（不写瓦数），之后改 FTP 会自动跟着变。写入的是「计划」：只进日历，不进 CTL/ATL/Form 曲线，练完由活动本身产生负荷。";
   $("course-sheet").classList.remove("hidden");
 }
 
@@ -592,8 +590,6 @@ const courseWriteBtn = $("btn-course-write");
 if (courseWriteBtn) {
   courseWriteBtn.addEventListener("click", async () => {
     if (!currentCourse) return;
-    const d = lastOverview;
-    const ftp = (d && d.profile && (d.profile.indoor_ftp || d.profile.ftp)) || 207;
     const day = $("course-date").value === "tomorrow" ? 1 : 0;
     const dt = new Date();
     dt.setDate(dt.getDate() + day);
@@ -603,7 +599,7 @@ if (courseWriteBtn) {
       type: "Ride",
       start_date_local: `${dateStr}T21:30:00`,
       moving_time: currentCourse.minutes * 60,
-      description: courseDescription(currentCourse, ftp),
+      description: courseDescription(currentCourse),
       not_on_fitness_chart: true,
     };
     if (!confirm(`把「${currentCourse.name}」写进 ${dateStr} 21:30 的 ICU 日历吗？`)) return;
