@@ -91,7 +91,7 @@ const TOOLS = [
           description: {
             type: "string",
             description:
-              "ICU 原生 workout 文本，必须每段一行，如：- 12m ramp 55-70%\\n- 20m 90%\\n- 5m 55%\\n- 20m 90%\\n- 13m 50%。不要写中文散文，散文不会生成结构。",
+              "ICU 原生 workout 文本，必须每段一行，如：- 12m ramp 55-70%\\n- 20m 90%\\n- 5m 55%\\n- 20m 90%\\n- 13m 50%。只放结构化行（可带「# 段名」），不要写中文散文、不要加来源/说明；散文会被拒绝写入。",
           },
           steps: {
             type: "array",

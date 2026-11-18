@@ -19,21 +19,24 @@ export default async function handler(req, res) {
     if (b.kind === "workouts") {
       const list = Array.isArray(b.workouts) ? b.workouts.slice(0, 7) : [];
       if (!list.length) throw new Error("没有可写入的课");
-      const source = String(b.source || "教练对话").slice(0, 20);
-      const stamp = new Date(Date.now() + 8 * 3600 * 1000)
-        .toISOString()
-        .slice(0, 16)
-        .replace("T", " ");
-      const srcLine = `\n\n来源：icucoach · ${source}（${stamp} UTC+8）`;
       const workouts = list.map((w) => {
         const date = String(w.start_date_local || "").slice(0, 10);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("日期格式不对：" + w.start_date_local);
         const base = typeof w.description === "string" ? w.description.trim() : "";
+        // 日历里只放 ICU 结构化课（每段一行），散文/来源标注一概不写进去
+        const structured = base
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => /^(#|-)/.test(l))
+          .join("\n");
+        if (!structured) {
+          throw new Error(`「${w.name || "训练课"}」没有结构化分段，拒绝以文本形式写入日历`);
+        }
         return {
           name: String(w.name || "训练课").slice(0, 120),
           type: w.type === "Rest" ? "Rest" : "Ride",
           start_date_local: date + "T00:00:00",
-          description: base + srcLine,
+          description: structured,
           moving_time: Number.isFinite(Number(w.moving_time)) ? Number(w.moving_time) : null,
         };
       });
