@@ -137,6 +137,7 @@ function switchView(name) {
 
 // ---------- 概览 ----------
 let overviewActivities = [];
+let lastOverview = null;
 
 // 用概览返回的活动列表填充「单次/多次复盘」的多选列表
 function populateSingleSelect() {
@@ -170,6 +171,7 @@ function populateSingleSelect() {
 async function loadOverview(retry = 1) {
   try {
     const d = await api("/api/overview");
+    lastOverview = d;
     overviewActivities = d.activities || [];
     populateSingleSelect();
     renderOverview(d);
@@ -231,6 +233,338 @@ if (dailyWriteBtn) {
     }
   });
 }
+
+// ---------- 课程库（按当天健康数据给建议，自选后写入 ICU） ----------
+const COURSES = [
+  {
+    id: "recovery",
+    sys: "recovery",
+    name: "Z1 恢复 40min",
+    minutes: 40,
+    tss: 20,
+    why: "纯恢复，只为了让腿动起来，不产生训练负荷。",
+    steps: [
+      { label: "Recovery", min: 40, pct: [50, 60], cad: 85 },
+    ],
+  },
+  {
+    id: "z2-60",
+    sys: "z2",
+    name: "Z2 有氧 60min",
+    minutes: 60,
+    tss: 46,
+    why: "短一档的有氧，时间不够时的标准选择。",
+    steps: [
+      { label: "Warm-up", min: 8, pct: [50, 65], cad: 90, ramp: true },
+      { label: "Aerobic", min: 44, pct: [68, 68], cad: 90 },
+      { label: "Cool-down", min: 8, pct: [50, 50], cad: 80 },
+    ],
+  },
+  {
+    id: "z2-85",
+    sys: "z2",
+    name: "Z2 有氧 85min",
+    minutes: 85,
+    tss: 66,
+    why: "主力有氧课：加时长不加功率，CTL 靠它慢慢抬。",
+    steps: [
+      { label: "Warm-up", min: 10, pct: [50, 68], cad: 90, ramp: true },
+      { label: "Aerobic", min: 65, pct: [68, 68], cad: 90 },
+      { label: "Cool-down", min: 10, pct: [50, 50], cad: 80 },
+    ],
+  },
+  {
+    id: "z2-120",
+    sys: "z2",
+    name: "Z2 长距 120min",
+    minutes: 120,
+    tss: 92,
+    why: "周末型长课，练的是抗衰减和补给，不是强度。",
+    steps: [
+      { label: "Warm-up", min: 10, pct: [50, 68], cad: 90, ramp: true },
+      { label: "Aerobic", min: 100, pct: [68, 68], cad: 90 },
+      { label: "Cool-down", min: 10, pct: [50, 50], cad: 80 },
+    ],
+  },
+  {
+    id: "sweet-2x20",
+    sys: "sweet",
+    name: "甜区 2×20min",
+    minutes: 80,
+    tss: 78,
+    why: "甜区（88-92% FTP），性价比最高的阈值下刺激。",
+    steps: [
+      { label: "Warm-up", min: 12, pct: [50, 70], cad: 90, ramp: true },
+      { label: "Sweet Spot 1", min: 20, pct: [90, 90], cad: 88 },
+      { label: "Recovery", min: 5, pct: [55, 55], cad: 80 },
+      { label: "Sweet Spot 2", min: 20, pct: [90, 90], cad: 88 },
+      { label: "Cool-down", min: 13, pct: [50, 50], cad: 80 },
+    ],
+  },
+  {
+    id: "threshold-3x8",
+    sys: "threshold",
+    name: "阈值 3×8min",
+    minutes: 68,
+    tss: 72,
+    why: "阈值（93-95% FTP），练的是顶住乳酸的能力。",
+    steps: [
+      { label: "Warm-up", min: 12, pct: [50, 72], cad: 90, ramp: true },
+      { label: "Threshold 1", min: 8, pct: [95, 95], cad: 85 },
+      { label: "Recovery", min: 3, pct: [55, 55], cad: 80 },
+      { label: "Threshold 2", min: 8, pct: [95, 95], cad: 85 },
+      { label: "Recovery", min: 3, pct: [55, 55], cad: 80 },
+      { label: "Threshold 3", min: 8, pct: [95, 95], cad: 85 },
+      { label: "Cool-down", min: 10, pct: [50, 50], cad: 80 },
+    ],
+  },
+  {
+    id: "vo2-5x3",
+    sys: "vo2",
+    name: "VO2max 5×3min",
+    minutes: 62,
+    tss: 62,
+    why: "摄氧课（106-115% FTP），一周最多一次，代价大。",
+    steps: [
+      { label: "Warm-up", min: 12, pct: [50, 75], cad: 90, ramp: true },
+      { label: "VO2max 1", min: 3, pct: [110, 110], cad: 95 },
+      { label: "Recovery", min: 3, pct: [55, 55], cad: 80 },
+      { label: "VO2max 2", min: 3, pct: [110, 110], cad: 95 },
+      { label: "Recovery", min: 3, pct: [55, 55], cad: 80 },
+      { label: "VO2max 3", min: 3, pct: [110, 110], cad: 95 },
+      { label: "Recovery", min: 3, pct: [55, 55], cad: 80 },
+      { label: "VO2max 4", min: 3, pct: [110, 110], cad: 95 },
+      { label: "Recovery", min: 3, pct: [55, 55], cad: 80 },
+      { label: "VO2max 5", min: 3, pct: [110, 110], cad: 95 },
+      { label: "Cool-down", min: 10, pct: [50, 50], cad: 80 },
+    ],
+  },
+];
+
+function courseState(d) {
+  const f = (d && d.fitness) || {};
+  const ws = (d && d.wellness) || [];
+  const w = ws[0] || {};
+  const sleep = w.sleepSecs ? w.sleepSecs / 3600 : null;
+  const hrv = typeof w.hrv === "number" ? w.hrv : null;
+  const rhr = typeof w.restingHR === "number" ? w.restingHR : null;
+  const base = ws.slice(1, 8);
+  const avg = (k) => {
+    const v = base.map((x) => x[k]).filter((x) => typeof x === "number");
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const hrvBase = avg("hrv");
+  const rhrBase = avg("restingHR");
+
+  const acts = (d && d.activities) || [];
+  const now = new Date();
+  const monday = new Date(now);
+  const dow = (now.getDay() + 6) % 7;
+  monday.setDate(now.getDate() - dow);
+  const mondayStr = monday.toISOString().slice(0, 10);
+  const weekTss = acts
+    .filter((a) => String(a.start_date_local || "") >= mondayStr && /ride/i.test(a.type || ""))
+    .reduce((x, a) => x + (a.icu_training_load || 0), 0);
+
+  const emptyDays = d && d.empty_days != null ? d.empty_days : null;
+  const form = typeof f.form === "number" ? f.form : null;
+
+  const flags = [];
+  if (sleep != null && sleep < 6) flags.push({ k: "sleep", text: `睡眠 ${sleep.toFixed(1)}h（低于 6h）` });
+  if (rhr != null && rhrBase && rhr >= rhrBase + 5) flags.push({ k: "rhr", text: `静息心率 ${rhr}，比近 7 天基线高 ${Math.round(rhr - rhrBase)}` });
+  if (hrv != null && hrvBase && hrv < hrvBase * 0.8) flags.push({ k: "hrv", text: `HRV ${Math.round(hrv)}，低于基线 ${Math.round(hrvBase)}` });
+  if (form != null && form < -20) flags.push({ k: "form", text: `Form ${Math.round(form)}，疲劳堆积` });
+
+  let level = "normal";
+  if (flags.length) level = "low";
+  else if (form != null && form >= 5 && (emptyDays == null || emptyDays >= 2) && (sleep == null || sleep >= 7)) level = "fresh";
+
+  return { sleep, hrv, rhr, hrvBase, rhrBase, form, weekTss, emptyDays, flags, level, ctl: f.ctl, atl: f.atl };
+}
+
+function rateCourse(c, st) {
+  const level = st.level;
+  const key = c.sys;
+  if (level === "low") {
+    if (key === "recovery") return ["推荐", "今天只该做这档：相比训练，恢复更值钱"];
+    if (key === "z2" && c.minutes <= 60) return ["可选", "短 Z2 可以，功率保持 68%，别再往上加"];
+    if (key === "z2") return ["不推荐", "先补恢复与睡眠，长有氧往后放"];
+    return ["不推荐", "强度课会在恢复不足时加深疲劳"];
+  }
+  if (level === "fresh") {
+    if (key === "threshold") return ["推荐", "恢复有余量，这周正缺阈值刺激"];
+    if (key === "vo2") return ["推荐", "有余量且距上次 ≥2 天，摄氧课可以上"];
+    if (key === "sweet") return ["推荐", "第二优先，比阈值便宜"];
+    if (key === "z2" && c.minutes >= 120) return ["可选", "时间够就做，注意补水"];
+    if (key === "z2") return ["可选", "有氧底随时可以补"];
+    return ["可选", "今天不需要它"];
+  }
+  // normal
+  if (key === "z2" && c.minutes === 85) return ["推荐", "剂量与当前 CTL 最匹配：加时长不加功率"];
+  if (key === "sweet") return ["推荐", "有刺激但不深，适合正常状态"];
+  if (key === "z2" && c.minutes <= 60) return ["可选", "时间不够就用这档"];
+  if (key === "z2" && c.minutes >= 120) return ["不推荐", "本周总量还不需要这个长度"];
+  if (key === "threshold") return ["可选", "距上次 ≥1 天再上，别连着两天"];
+  if (key === "vo2") return ["不推荐", "当前 Form 不适合，先把有氧量补上"];
+  return ["可选", "按时间选"];
+}
+
+function wattsOf(pct, ftp) {
+  const v = Math.round((pct / 100) * ftp);
+  return v;
+}
+
+function courseDescription(c, ftp) {
+  const lines = [];
+  c.steps.forEach((s) => {
+    const lo = wattsOf(s.pct[0], ftp);
+    const hi = wattsOf(s.pct[1], ftp);
+    const pw = s.ramp ? `ramp ${s.pct[0]}-${s.pct[1]}%` : s.pct[0] === s.pct[1] ? `${s.pct[0]}%` : `${s.pct[0]}-${s.pct[1]}%`;
+    lines.push(s.label, `- ${s.min}m ${pw} ${s.cad}rpm`, "");
+  });
+  return lines.join("\n");
+}
+
+function renderCourses() {
+  const d = lastOverview;
+  const st = courseState(d || {});
+  const ftp = (d && d.profile && (d.profile.indoor_ftp || d.profile.ftp)) || 207;
+
+  const kv = $("course-state-kv");
+  if (kv) {
+    const rows = [
+      ["Form", st.form != null ? Math.round(st.form) : "—"],
+      ["CTL / ATL", `${st.ctl != null ? Math.round(st.ctl) : "—"} / ${st.atl != null ? Math.round(st.atl) : "—"}`],
+      ["本周 TSS", `${st.weekTss} TSS`],
+      ["睡眠", st.sleep != null ? st.sleep.toFixed(1) + " h" : "—"],
+      ["HRV / 静息心率", `${st.hrv != null ? Math.round(st.hrv) : "—"} / ${st.rhr != null ? st.rhr : "—"}`],
+      ["距上次训练", st.emptyDays != null ? (st.emptyDays === 0 ? "今天已练" : "空窗 " + st.emptyDays + " 天") : "—"],
+    ];
+    kv.innerHTML = rows.map(([k, v]) => `<div class="kv-row"><span>${k}</span><b>${v}</b></div>`).join("");
+  }
+
+  const hint = $("course-state-hint");
+  if (hint) {
+    const reasonTxt = st.flags.length ? st.flags.map((f) => f.text).join("；") : `Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) + "h" : "—"}，没有红旗`;
+    const lv = st.level === "low" ? "偏疲劳：只给恢复与短有氧" : st.level === "fresh" ? "有余量：可以上强度" : "正常：按剂量推进";
+    hint.textContent = `${lv}。依据：${reasonTxt}。`;
+  }
+
+  const list = $("course-list");
+  if (!list) return;
+  list.innerHTML = COURSES.map((c) => {
+    const [verdict, reason] = rateCourse(c, st);
+    const cls = verdict === "推荐" ? "ok" : verdict === "可选" ? "mid" : "no";
+    return `<button class="course-item ${cls}" data-id="${c.id}">
+      <div class="course-head">
+        <span class="course-name">${c.name}</span>
+        <span class="course-verdict ${cls}">${verdict}</span>
+      </div>
+      <div class="course-meta">${c.minutes}min · TSS 约 ${c.tss} · ${c.sys === "recovery" ? "恢复" : c.sys === "z2" ? "有氧" : c.sys === "sweet" ? "甜区" : c.sys === "threshold" ? "阈值" : "摄氧"}</div>
+      <div class="course-reason">${reason}</div>
+    </button>`;
+  }).join("");
+}
+
+let currentCourse = null;
+function openCourseSheet(c) {
+  const d = lastOverview;
+  const st = courseState(d || {});
+  const ftp = (d && d.profile && (d.profile.indoor_ftp || d.profile.ftp)) || 207;
+  const [verdict, reason] = rateCourse(c, st);
+  currentCourse = c;
+  $("course-sheet-title").textContent = c.name;
+  $("course-sheet-sub").textContent = `${c.minutes}min · TSS 约 ${c.tss} · 判定：${verdict}`;
+  const steps = c.steps
+    .map((s) => {
+      const lo = wattsOf(s.pct[0], ftp);
+      const hi = wattsOf(s.pct[1], ftp);
+      const pw = s.pct[0] === s.pct[1] ? `${lo}W（${s.pct[0]}%）` : `${lo}-${hi}W（${s.pct[0]}-${s.pct[1]}%）`;
+      return `- **${s.label}** ${s.min}min · ${pw} · ${s.cad}rpm`;
+    })
+    .join("\n");
+  const basis = st.flags.length
+    ? st.flags.map((f) => f.text).join("；")
+    : `Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) : "—"}h、本周 ${st.weekTss} TSS`;
+  $("course-sheet-body").innerHTML = renderMarkdown(
+    `**这节练什么**：${c.why}\n\n**结构（室内 FTP ${ftp}W）**\n${steps}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
+  );
+  $("course-sheet-hint").textContent = "功率按 %FTP 写入 ICU，之后改 FTP 会自动跟着变；写入前会再确认一次。";
+  $("course-sheet").classList.remove("hidden");
+}
+
+function closeCourseSheet() {
+  $("course-sheet").classList.add("hidden");
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest) return;
+  if (e.target.closest("#course-sheet [data-close]")) closeCourseSheet();
+});
+
+const courseListEl = $("course-list");
+if (courseListEl) {
+  courseListEl.addEventListener("click", (e) => {
+    const item = e.target.closest(".course-item");
+    if (!item) return;
+    const c = COURSES.find((x) => x.id === item.dataset.id);
+    if (c) openCourseSheet(c);
+  });
+}
+
+const courseWriteBtn = $("btn-course-write");
+if (courseWriteBtn) {
+  courseWriteBtn.addEventListener("click", async () => {
+    if (!currentCourse) return;
+    const d = lastOverview;
+    const ftp = (d && d.profile && (d.profile.indoor_ftp || d.profile.ftp)) || 207;
+    const day = $("course-date").value === "tomorrow" ? 1 : 0;
+    const dt = new Date();
+    dt.setDate(dt.getDate() + day);
+    const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    const w = {
+      name: currentCourse.name,
+      type: "Ride",
+      start_date_local: `${dateStr}T21:30:00`,
+      moving_time: currentCourse.minutes * 60,
+      description: courseDescription(currentCourse, ftp),
+    };
+    if (!confirm(`把「${currentCourse.name}」写进 ${dateStr} 21:30 的 ICU 日历吗？`)) return;
+    courseWriteBtn.disabled = true;
+    try {
+      const r = await api("/api/workouts", { method: "POST", body: JSON.stringify({ workouts: [w] }) });
+      toast(`已写入 ${r.count} 节：${dateStr} 21:30`);
+      closeCourseSheet();
+      loadOverview();
+    } catch (e) {
+      toast("写入失败：" + e.message);
+    } finally {
+      courseWriteBtn.disabled = false;
+    }
+  });
+}
+
+const courseAskBtn = $("btn-course-ask");
+if (courseAskBtn) {
+  courseAskBtn.addEventListener("click", () => {
+    if (!currentCourse) return;
+    closeCourseSheet();
+    switchView("chat");
+    const st = courseState(lastOverview || {});
+    const input = $("chat-input");
+    if (input) {
+      input.value = `我想上「${currentCourse.name}」（${currentCourse.minutes}min，TSS 约 ${currentCourse.tss}）。按我今天的 Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) : "—"}h、本周 ${st.weekTss} TSS，帮我判断该不该上、功率要不要调。`;
+      input.dispatchEvent(new Event("input"));
+      input.focus();
+    }
+  });
+}
+
+if ($("btn-open-courses")) {
+  $("btn-open-courses").addEventListener("click", (e) =>
+    tapThen(e.currentTarget, () => { switchView("courses"); loadOverview(); })
+  );
+}
+if ($("btn-back-chat-4")) $("btn-back-chat-4").addEventListener("click", () => switchView("chat"));
 
 // ---------- 单次 / 多次复盘 ----------
 $("btn-single").addEventListener("click", async () => {

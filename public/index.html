@@ -18,6 +18,7 @@
     <div class="topbar-actions">
       <button class="ghost-btn" id="btn-refresh" aria-label="刷新状态">刷新</button>
       <button class="ghost-btn" id="btn-daily-write" aria-label="生成今日建议并写入 ICU">建议</button>
+      <button class="ghost-btn" id="btn-open-courses" aria-label="课程">课程</button>
       <button class="ghost-btn" id="btn-open-review" aria-label="复盘">复盘</button>
       <button class="ghost-btn" id="btn-open-settings" aria-label="设置">设置</button>
     </div>
@@ -89,6 +90,46 @@
         </div>
         <div class="markdown" id="daily-sheet-text">加载中…</div>
         <div class="hint" id="daily-sheet-hint"></div>
+      </div>
+    </div>
+  </main>
+
+  <main class="view hidden" id="view-courses">
+    <button class="ghost-btn" id="btn-back-chat-4" style="margin-bottom:10px">← 返回对话</button>
+    <section class="card">
+      <h2 class="card-title">今天的状态</h2>
+      <div class="kv" id="course-state-kv"></div>
+      <div class="hint" id="course-state-hint">加载中…</div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">可选课程</h2>
+      <div class="hint">按你今天的恢复与负荷排了序；点开看结构，确认后才写入 ICU。功率按 %FTP 写，换 FTP 会自动跟着变。</div>
+      <div id="course-list" class="course-list"></div>
+    </section>
+
+    <div class="sheet hidden" id="course-sheet">
+      <div class="sheet-mask" data-close="1"></div>
+      <div class="sheet-panel">
+        <div class="sheet-head">
+          <div>
+            <div class="sheet-title" id="course-sheet-title">课程</div>
+            <div class="sheet-sub" id="course-sheet-sub"></div>
+          </div>
+          <button class="sheet-x" data-close="1" aria-label="关闭">×</button>
+        </div>
+        <div class="markdown" id="course-sheet-body"></div>
+        <div class="form-row" style="margin-top:10px">
+          <label>写进哪天</label>
+          <select id="course-date">
+            <option value="today">今天</option>
+            <option value="tomorrow">明天</option>
+          </select>
+        </div>
+        <div class="pick-actions">
+          <button class="ghost-btn" id="btn-course-ask" type="button">先问教练</button>
+          <button class="primary-btn" id="btn-course-write" type="button">写入 ICU 日历</button>
+        </div>
+        <div class="hint" id="course-sheet-hint"></div>
       </div>
     </div>
   </main>
