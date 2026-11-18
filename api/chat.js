@@ -407,11 +407,11 @@ async function executeTool(name, args) {
     ]);
 
     // 持续能力（测试最长工作段 / 近 21 天最长高强段）：课程推荐必须看到它，否则只会按当天状态给通用课
-    let history = null;
+    let hist = null;
     try {
-      history = await trainingHistory(icu, histActs, profile);
+      hist = await trainingHistory(icu, histActs, profile);
     } catch (e) {
-      history = null;
+      hist = null;
     }
 
     const custom = (req.body && req.body.customPrompt) || "";
@@ -440,8 +440,8 @@ async function executeTool(name, args) {
       buildChatDataBlock({ profile, fitness, wellness, activities, baseline }) +
       `\n\n现在是 ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ")}（UTC+8，${["周日","周一","周二","周三","周四","周五","周六"][new Date(Date.now() + 8 * 3600 * 1000).getUTCDay()]}）。所有日期、空窗、相对时间都按这个算；回答前先算最近一次训练结束到现在过了多久，刚收车不到 3 小时就不要问他几点睡着、次日恢复这类还没发生的事。` +
       (calendarLine(events) ? `\n\n【ICU 日历上已有的安排（优先尊重，不要重复排）】\n${calendarLine(events)}` : "") +
-      (history
-        ? `\n\n【持续能力（ICU 区间字段，别重新估算）】${history.basis}\n判定：${history.weak_sustained ? "20 分钟连续输出是短板" : "20 分钟续航够用"}。规则：这只是事实，不是每次都强制改课——**解除限制打开时**，若短板成立才首选 **2×20 甜区（88-92%FTP）**去找补 20min 续航；关闭时按常规状态排课，3×8 阈值照常可以推荐。给课时必须引用上面的分钟数和日期，并说明这是从测试分段算出来的。`
+      (hist
+        ? `\n\n【持续能力（ICU 区间字段，别重新估算）】${hist.basis}\n判定：${hist.weak_sustained ? "20 分钟连续输出是短板" : "20 分钟续航够用"}。规则：这只是事实，不是每次都强制改课——**解除限制打开时**，若短板成立才首选 **2×20 甜区（88-92%FTP）**去找补 20min 续航；关闭时按常规状态排课，3×8 阈值照常可以推荐。给课时必须引用上面的分钟数和日期，并说明这是从测试分段算出来的。`
         : "") +
       (ignoreTime
         ? `\n\n【解除限制模式（已开启）】忽略他的可用时段、单次时长上限、带娃与工作冲突，改为**按短板选课型**；关闭时仍按常规时段与状态排课，3×8 阈值这类常规课可以正常推荐。
@@ -456,11 +456,12 @@ async function executeTool(name, args) {
       TOOL_INSTRUCTIONS;
 
     // 「自动」思考档位：按这轮问题的复杂度选档
-    const lastText = [...history].reverse().find((m) => m.role === "user")?.content || "";
+    const historyArr = Array.isArray(history) ? history : [];
+    const lastText = [...historyArr].reverse().find((m) => m.role === "user")?.content || "";
     const heavy =
       /复盘|课表|排课|计划|对比|分析|评估|生成|写入|为什么|这周|下周|怎么练|总结/.test(lastText) ||
       lastText.length > 120 ||
-      history.length >= 8;
+      historyArr.length >= 8;
     const light = lastText.length <= 12 && !heavy;
     const autoLv = heavy ? "max" : light ? "low" : "high";
 
@@ -471,7 +472,7 @@ async function executeTool(name, args) {
     const t0 = Date.now();
 
     const env = withAutoThinking(llmEnv(req.headers), autoLv);
-    const baseMsgs = [{ role: "system", content: system }, ...history];
+    const baseMsgs = [{ role: "system", content: system }, ...historyArr];
     let msgs = baseMsgs;
     let preAnswer = "";
     let pendingSeen = false;
