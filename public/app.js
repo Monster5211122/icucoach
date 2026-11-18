@@ -420,6 +420,8 @@ function courseState(d) {
 
   return {
     sleep, hrv, rhr, hrvBase, rhrBase, form, weekTss, emptyDays, flags, level,
+    lastDays: d && Number.isFinite(Number(d.last_days)) ? Number(d.last_days) : null,
+    lastDate: (d && d.last_training_date) || null,
     ctl: f.ctl, atl: f.atl,
     loadSource: fa && typeof fa.form === "number" ? "已练" : "ICU",
     doneToday: (d && d.today_completed) || [],
@@ -561,7 +563,14 @@ function renderCourses() {
       ["本周已完成", `${st.weekTss} TSS`],
       ["睡眠", st.sleep != null ? st.sleep.toFixed(1) + " h" : "—"],
       ["HRV / 静息心率", `${st.hrv != null ? Math.round(st.hrv) : "—"} / ${st.rhr != null ? st.rhr : "—"}`],
-      ["距上次训练", st.emptyDays != null ? (st.emptyDays === 0 ? "今天已练" : "空窗 " + st.emptyDays + " 天") : "—"],
+      [
+        "距上次训练",
+        st.lastDays == null
+          ? "—"
+          : st.lastDays === 0
+          ? "今天已练"
+          : `${st.lastDate ? st.lastDate.slice(5) : "—"} · ${st.lastDays} 天前`,
+      ],
     ];
     kv.innerHTML = rows.map(([k, v]) => `<div class="kv-row"><span>${k}</span><b>${v}</b></div>`).join("");
   }
