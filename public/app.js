@@ -1125,8 +1125,6 @@ async function sendChat(presetText, reuseLastUser = false) {
     const mi = chatMessages.length;
     chatMessages.push({ role: "assistant", content: "" });
     renderChat();
-    // 先落一个「正在生成…」占位：首个字到达前气泡不会空着，让人以为没反应
-    paint();
     let pending = null;
     let errMsg = "";
     let raf = null;
@@ -1141,6 +1139,8 @@ async function sendChat(presetText, reuseLastUser = false) {
         if (wrap) wrap.scrollTop = wrap.scrollHeight;
       });
     };
+    // 先落一个「正在生成…」占位：首个字到达前气泡不会空着
+    paint();
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
