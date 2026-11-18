@@ -204,9 +204,27 @@ export default async function handler(req, res) {
         return res.status(404).json({ ok: false, error: "读不到这些活动，请确认 ID 是否正确" });
       }
 
+      // 取出这些活动当天的 ICU 计划课，复盘时才能算“计划 vs 实际”
+      const planMap = {};
+      try {
+        const oldest = String(acts[0]?.start_date_local || "").slice(0, 10);
+        const newest = String(acts[acts.length - 1]?.start_date_local || "").slice(0, 10);
+        const evs = await icu.events({ oldest, newest }).catch(() => []);
+        (evs || [])
+          .filter((e) => e && e.category === "WORKOUT" && e.start_date_local)
+          .forEach((e) => { planMap[String(e.start_date_local).slice(0, 10)] = e; });
+      } catch { /* 计划拿不到就按没有计划处理 */ }
+
       const prompt =
         acts.length === 1
-          ? buildSingleAnalyzePrompt({ profile, fitness, wellness, baseline }, acts[0], custom)
+          ? buildSingleAnalyzePrompt(
+              {
+                profile, fitness, wellness, baseline,
+                plan: planMap[String(acts[0].start_date_local || "").slice(0, 10)] || null,
+              },
+              acts[0],
+              custom
+            )
           : buildMultiAnalyzePrompt({ profile, fitness, wellness, baseline }, acts, custom);
 
       const memory = await memoryContext(icu, getRetention(req)).catch(() => "");
