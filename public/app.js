@@ -178,8 +178,6 @@ async function loadOverview(retry = 1) {
     // ICU 偶发 429/超时就再试一次，别把状态条刷成一排横线
     if (retry > 0) return loadOverview(retry - 1);
     toast("数据加载失败：" + e.message + "（点右上「刷新」重试）");
-    const hint = $("overview-hint");
-    if (hint) hint.textContent = "加载失败：" + e.message;
     return false;
   }
 }
