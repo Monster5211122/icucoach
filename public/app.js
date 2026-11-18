@@ -293,6 +293,19 @@ const COURSES = [
     ],
   },
   {
+    id: "sweet-2x25",
+    sys: "sweet",
+    name: "甜区 2×25min（解除限制剂量）",
+    why: "甜区（88-92% FTP）加长版：把连续输出总量做到 50min，专补 20 分钟续航。",
+    steps: [
+      { label: "Warm-up", min: 12, pct: [50, 70], cad: 90, ramp: true },
+      { label: "Sweet Spot 1", min: 25, pct: [90, 90], cad: 88 },
+      { label: "Recovery", min: 5, pct: [55, 55], cad: 80 },
+      { label: "Sweet Spot 2", min: 25, pct: [90, 90], cad: 88 },
+      { label: "Cool-down", min: 13, pct: [50, 50], cad: 80 },
+    ],
+  },
+  {
     id: "threshold-3x8",
     sys: "threshold",
     name: "阈值 3×8min",
@@ -393,6 +406,8 @@ function courseState(d) {
     upcoming: (d && d.upcoming_planned) || [],
     plansOnChart: (d && d.plans_on_chart) || { count: 0, load: 0, items: [] },
     fitnessGap: (d && d.fitness_gap) || null,
+    history: (d && d.history) || null,
+    ignoreTime: !!loadSettings().ignoreTime,
   };
 }
 
@@ -400,12 +415,36 @@ function rateCourse(c, st) {
   const level = st.level;
   const key = c.sys;
   const cMinutes = courseStats(c).minutes;
+  const h = st.history;
+  const weak = !!(h && h.weak_sustained);
+  const weakProof = h && h.test && h.test.longest_min != null
+    ? `${h.test.date} FTP 测试最长工作段只有 ${h.test.longest_min}min`
+    : (h && h.sustained ? `近 21 天 ≥88%FTP 最长只有 ${h.sustained.min}min` : "没有 20min 连续段");
+  // 恢复不足时仍先保恢复，不受短板排序影响
   if (level === "low") {
     if (key === "recovery") return ["推荐", "今天只该做这档：相比训练，恢复更值钱"];
     if (key === "z2" && cMinutes <= 60) return ["可选", "短 Z2 可以，功率保持 68%，别再往上加"];
     if (key === "z2") return ["不推荐", "先补恢复与睡眠，长有氧往后放"];
     return ["不推荐", "强度课会在恢复不足时加深疲劳"];
   }
+  // 20 分钟续航是短板：甜区长段优先，8 分钟重复的阈值课往后排
+  if (weak) {
+    if (key === "sweet" && c.id === "sweet-2x25")
+      return st.ignoreTime
+        ? ["推荐", `解除限制：今天把甜区总量做到 50min（2×25），续航短板（${weakProof}）一次补足`]
+        : ["不推荐", `2×25 是解除限制的剂量（${weakProof}）；先把 2×20 稳住，再往上加`];
+    if (key === "sweet" && st.ignoreTime)
+      return ["可选", `解除限制按加长版 2×25 给剂量；2×20 先稳住（短板：${weakProof}）`];
+    if (key === "sweet") return ["推荐", `20 分钟连续输出是短板（${weakProof}）：先用 2×20 甜区把续航补起来`];
+    if (key === "threshold") return ["不推荐", `8 分钟重复补不到 20min 续航（${weakProof}），等能连续 20min 再上阈值`];
+    if (key === "vo2") return ["可选", "摄氧不是当前短板，优先级低于甜区长段"];
+    if (key === "z2" && cMinutes === 85) return ["可选", "有氧底要保，但今天优先级低于甜区长段"];
+    if (key === "z2" && cMinutes >= 120) return ["可选", "有氧底可以补，但今天短板是 20 分钟续航，先甜区"];
+  }
+  if (c.id === "sweet-2x25" && !weak)
+    return st.ignoreTime
+      ? ["可选", "解除限制剂量：身体允许就上，才补得动续航"]
+      : ["不推荐", "这是解除限制的剂量，平时用 2×20 就够"];
   if (level === "fresh") {
     if (key === "threshold") return ["推荐", "恢复有余量，这周正缺阈值刺激"];
     if (key === "vo2") return ["推荐", "有余量且距上次 ≥2 天，摄氧课可以上"];
@@ -418,7 +457,10 @@ function rateCourse(c, st) {
   if (key === "z2" && cMinutes === 85) return ["推荐", "剂量与当前 CTL 最匹配：加时长不加功率"];
   if (key === "sweet") return ["推荐", "有刺激但不深，适合正常状态"];
   if (key === "z2" && cMinutes <= 60) return ["可选", "时间不够就用这档"];
-  if (key === "z2" && cMinutes >= 120) return ["不推荐", "本周总量还不需要这个长度"];
+  if (key === "z2" && cMinutes >= 120)
+    return st.ignoreTime
+      ? ["推荐", "解除限制：按短板给足剂量；这节要整块时间，排不进就拆两段、效果降级"]
+      : ["不推荐", "本周总量还不需要这个长度"];
   if (key === "threshold") return ["可选", "距上次 ≥1 天再上，别连着两天"];
   if (key === "vo2") return ["不推荐", "当前 Form 不适合，先把有氧量补上"];
   return ["可选", "按时间选"];
@@ -521,7 +563,11 @@ function renderCourses() {
     if (st.plansOnChart && st.plansOnChart.count) {
       tail += `另有 ${st.plansOnChart.count} 条未来计划仍在 ICU 曲线里（+${st.plansOnChart.load} TSS），不计入本页判定；`;
     }
-    hint.textContent = `${lv}。依据：${reasonTxt}。${tail}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
+    const h = st.history;
+    const histTxt = h
+      ? `持续能力：${h.test ? `${h.test.date} 测试最长工作段 ${h.test.longest_min != null ? h.test.longest_min + "min" : "无 WORK 段"}` : "近 45 天没做测试"}${h.sustained ? `；近 21 天 ≥88%FTP 最长连续 ${h.sustained.min}min` : "；近 21 天没有 ≥88%FTP 连续段"}。${h.weak_sustained ? "判定：20 分钟续航是短板，甜区长段优先。" : ""}`
+      : "";
+    hint.textContent = `${lv}。依据：${reasonTxt}。${histTxt}${tail}${st.ignoreTime ? "解除限制已开：不看时段与时长，只按短板给剂量。" : ""}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
   }
 
   renderPlanCard(d, st);
@@ -579,6 +625,24 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest) return;
   if (e.target.closest("#course-sheet [data-close]")) closeCourseSheet();
 });
+
+// 课程页的解除限制开关：与对话页/设置页共用同一份本地设置
+const courseIgnore = $("course-ignore");
+function syncCourseIgnore() {
+  if (courseIgnore) courseIgnore.checked = !!loadSettings().ignoreTime;
+}
+if (courseIgnore) {
+  syncCourseIgnore();
+  courseIgnore.addEventListener("change", () => {
+    const s = loadSettings();
+    s.ignoreTime = courseIgnore.checked;
+    saveSettings(s);
+    if (typeof syncChatIgnore === "function") syncChatIgnore();
+    if (typeof syncPrefs === "function") syncPrefs();
+    toast(courseIgnore.checked ? "解除限制已开：只按短板给足剂量" : "解除限制已关：按时段与恢复排");
+    if (lastOverview) renderOverview(lastOverview);
+  });
+}
 
 const courseListEl = $("course-list");
 if (courseListEl) {
@@ -1168,6 +1232,8 @@ if (chatIgnore) {
     s.ignoreTime = chatIgnore.checked;
     saveSettings(s);
     if (typeof syncPrefs === "function") syncPrefs();
+    if (typeof syncCourseIgnore === "function") syncCourseIgnore();
+    if (lastOverview) renderOverview(lastOverview);
     toast(chatIgnore.checked ? "解除限制已开：只按短板给课" : "解除限制已关：按你的可用时段排");
   });
 }

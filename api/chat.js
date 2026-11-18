@@ -4,6 +4,7 @@ import { coachSystem, buildChatDataBlock } from "../lib/prompts.js";
 import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
 import { authError } from "../lib/auth.js";
+import { trainingHistory } from "../lib/history.js";
 
 // ICU Key / 运动员 ID：优先取页面「设置」里带过来的请求头，兜底用服务器环境变量
 function getEnv(req) {
@@ -331,7 +332,7 @@ export default async function handler(req, res) {
 
   try {
     // 每次对话都拉最新数据，拼进系统提示词
-    const [profile, fitness, wellness, activities, memory, baseline, events] = await Promise.all([
+    const [profile, fitness, wellness, activities, memory, baseline, events, histActs] = await Promise.all([
       icu.profile().catch(() => null),
       icu.latestFitness().catch(() => null),
       icu.wellness(7).catch(() => []),
@@ -339,7 +340,16 @@ export default async function handler(req, res) {
       memoryContext(icu, retention).catch(() => ""),
       icu.wellnessBaseline(30).catch(() => null),
       icu.events({ oldest: daysAgo(0), newest: daysAgo(-7) }).catch(() => []),
+      icu.activities({ oldest: daysAgo(45) }).catch(() => []),
     ]);
+
+    // 持续能力（测试最长工作段 / 近 21 天最长高强段）：课程推荐必须看到它，否则只会按当天状态给通用课
+    let history = null;
+    try {
+      history = await trainingHistory(icu, histActs, profile);
+    } catch (e) {
+      history = null;
+    }
 
     const custom = (req.body && req.body.customPrompt) || "";
     const persona = (req.body && req.body.persona) || "";
@@ -367,8 +377,11 @@ export default async function handler(req, res) {
       buildChatDataBlock({ profile, fitness, wellness, activities, baseline }) +
       `\n\n现在是 ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ")}（UTC+8，${["周日","周一","周二","周三","周四","周五","周六"][new Date(Date.now() + 8 * 3600 * 1000).getUTCDay()]}）。所有日期、空窗、相对时间都按这个算；回答前先算最近一次训练结束到现在过了多久，刚收车不到 3 小时就不要问他几点睡着、次日恢复这类还没发生的事。` +
       (calendarLine(events) ? `\n\n【ICU 日历上已有的安排（优先尊重，不要重复排）】\n${calendarLine(events)}` : "") +
+      (history
+        ? `\n\n【持续能力（ICU 区间字段，别重新估算）】${history.basis}\n判定：${history.weak_sustained ? "20 分钟连续输出是短板" : "20 分钟续航够用"}。规则：短板成立时，今天首选 **2×20 甜区（88-92%FTP）**，不要给 3×8 这类 8 分钟重复的阈值课（8 分钟段落补不到 20min 续航）；等能连续 20min 之后再上阈值。给课时必须引用上面的分钟数和日期，并说明这是从测试分段算出来的。`
+        : "") +
       (ignoreTime
-        ? `\n\n【解除限制模式（已开启）】忽略他的可用时段、单次时长上限、带娃与工作冲突：只按数据里的短板给最该练的课，不要为了迁就晚上而降剂量。剂量按短板定：有氧底弱→90-120min 连续 Z2；阈值耐力弱→2x20 @93-95%；VO2max 缺→5x3 @110-115%；灰区≥50% 时只排两端。每节在理由里标一句"这节要整块时间（含热身约 X 小时），排不出来就拆两段、效果降级约三成"，但剂量不降。`
+        ? `\n\n【解除限制模式（已开启）】忽略他的可用时段、单次时长上限、带娃与工作冲突：只按数据里的短板给最该练的课，不要为了迁就晚上而降剂量。剂量按短板定：有氧底弱→90-120min 连续 Z2；阈值耐力弱→2x20 @93-95%；VO2max 缺→5x3 @110-115%；灰区≥50% 时只排两端。每节在理由里标一句"这节要整块时间（含热身约 X 小时），排不出来就拆两段、效果降级约三成"，但剂量不降。开关已开时，你给的课必须和关闭时明显不同：总时长至少比常规档多 20 分钟，或主段总时长翻倍；如果给出的课与常规档一模一样，视为没执行该模式，必须重写。`
         : "") +
       `\n\n【他的可用时段】${winText}${maxDur > 0 ? `；单次最长 ${maxDur} 分钟` : ""}\n晚间按强度×时长上限排：≤60 分钟可到阈值/VO2max，60-90 分钟最高甜区（FTP 85-90%），90-120 分钟只做 Z2（≤70%），>120 分钟晚间不给。长课与强度课优先白天；晚上只留 45-60 分钟轻课。` +
       (memory

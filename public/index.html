@@ -100,10 +100,16 @@
       <h2 class="card-title">今天的状态</h2>
       <div class="kv" id="course-state-kv"></div>
       <div class="hint" id="course-state-hint">加载中…</div>
+      <div class="mode-row" style="margin-top:8px">
+        <label class="ss-toggle" title="解除限制：不看时段、带娃与时长，只按短板给足剂量">
+          <input type="checkbox" id="course-ignore" role="switch" />
+          <span class="ss-toggle-text">解除限制</span>
+        </label>
+      </div>
     </section>
     <section class="card">
       <h2 class="card-title">可选课程</h2>
-      <div class="hint">按你今天的恢复与负荷排了序；点开看结构，确认后才写入 ICU。功率按 %FTP 写，换 FTP 会自动跟着变。</div>
+      <div class="hint">按你的恢复、负荷和最近的持续能力排了序；点开看结构，确认后才写入 ICU。功率按 %FTP 写，换 FTP 会自动跟着变。</div>
       <div id="course-list" class="course-list"></div>
     </section>
     <section class="card hidden" id="course-plan-card">

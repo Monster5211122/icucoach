@@ -280,6 +280,8 @@ export default async function handler(req, res) {
     }
 
     // action === "plan"
+    // 解除限制开关：前端走请求头（x-plan-ignore-time），也要兼容直接放 body 的调用
+    const ignoreHeader = String(req.headers["x-plan-ignore-time"] || "") === "1";
     const {
       goal,
       days = 7,
@@ -331,7 +333,7 @@ export default async function handler(req, res) {
         mode,
         windows: Array.isArray(windows) && windows.length ? windows : ["night"],
         maxDuration: Number.isFinite(Number(maxDuration)) ? Number(maxDuration) : 0,
-        ignoreTime: ignoreTime === true || String(ignoreTime) === "1",
+        ignoreTime: ignoreTime === true || String(ignoreTime) === "1" || ignoreHeader,
       },
       custom
     );

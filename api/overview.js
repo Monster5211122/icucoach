@@ -1,4 +1,5 @@
 import { createIcuClient } from "../lib/icu.js";
+import { trainingHistory } from "../lib/history.js";
 import { getTodayDaily } from "../lib/daily.js";
 import { authError } from "../lib/auth.js";
 
@@ -81,6 +82,14 @@ export default async function handler(req, res) {
       }
     })
   );
+
+  // 持续能力（测试最长工作段 / 近21天最长高强段）：课程推荐要用它，不能只看当天 Form
+  try {
+    out.history = await trainingHistory(icu, acts, out.profile);
+  } catch (e) {
+    out.history = null;
+    out.history_error = String(e.message || e);
+  }
 
   // 距上次训练天数（空窗提醒用）：按日期差算（UTC+8），不能用小时差向下取整，
   // 否则晚上训练在次日白天会少算一天（前天训练被当成昨天）
