@@ -1591,7 +1591,7 @@ function renderStatusStrip(d) {
     week.textContent =
       tss == null
         ? "本周 TSS —"
-        : `本周 TSS ${tss}${days ? ` · ${days} 天` : ""}`;
+        : `本周 TSS ${tss} · 已练 ${days || 0} 天`;
     week.className = "ss-item" + (typeof tss === "number" && tss < 120 ? " warn" : "");
   }
   const plan = $("ss-plan");
