@@ -343,7 +343,9 @@ const COURSES = [
 ];
 
 function courseState(d) {
-  const f = (d && d.fitness) || {};
+  // 优先用「只算已完成活动」重算的负荷；ICU 自带的 ctl/atl/form 会把日历里的计划课也卷进曲线
+  const fa = d && d.fitness_actual;
+  const f = fa && typeof fa.form === "number" ? fa : ((d && d.fitness) || {});
   const ws = (d && d.wellness) || [];
   const w = ws[0] || {};
   const sleep = w.sleepSecs ? w.sleepSecs / 3600 : null;
@@ -380,7 +382,15 @@ function courseState(d) {
   if (flags.length) level = "low";
   else if (form != null && form >= 5 && (emptyDays == null || emptyDays >= 2) && (sleep == null || sleep >= 7)) level = "fresh";
 
-  return { sleep, hrv, rhr, hrvBase, rhrBase, form, weekTss, emptyDays, flags, level, ctl: f.ctl, atl: f.atl };
+  return {
+    sleep, hrv, rhr, hrvBase, rhrBase, form, weekTss, emptyDays, flags, level,
+    ctl: f.ctl, atl: f.atl,
+    loadSource: fa && typeof fa.form === "number" ? "已练" : "ICU",
+    doneToday: (d && d.today_completed) || [],
+    planToday: (d && d.today_planned) || [],
+    planTodayLoad: (d && d.today_planned_load) || 0,
+    upcoming: (d && d.upcoming_planned) || [],
+  };
 }
 
 function rateCourse(c, st) {
@@ -438,10 +448,16 @@ function renderCourses() {
 
   const kv = $("course-state-kv");
   if (kv) {
+    const doneTxt = st.doneToday.length
+      ? st.doneToday.map((w) => `${w.name}（${w.load} TSS）`).join("；")
+      : st.planToday.length
+      ? `计划未练：${st.planToday.map((w) => `${w.name}（${w.load} TSS）`).join("；")}`
+      : "空";
     const rows = [
-      ["Form", st.form != null ? Math.round(st.form) : "—"],
+      ["Form（" + st.loadSource + "）", st.form != null ? Math.round(st.form) : "—"],
       ["CTL / ATL", `${st.ctl != null ? Math.round(st.ctl) : "—"} / ${st.atl != null ? Math.round(st.atl) : "—"}`],
-      ["本周 TSS", `${st.weekTss} TSS`],
+      ["今天", doneTxt],
+      ["本周已完成", `${st.weekTss} TSS`],
       ["睡眠", st.sleep != null ? st.sleep.toFixed(1) + " h" : "—"],
       ["HRV / 静息心率", `${st.hrv != null ? Math.round(st.hrv) : "—"} / ${st.rhr != null ? st.rhr : "—"}`],
       ["距上次训练", st.emptyDays != null ? (st.emptyDays === 0 ? "今天已练" : "空窗 " + st.emptyDays + " 天") : "—"],
@@ -453,7 +469,10 @@ function renderCourses() {
   if (hint) {
     const reasonTxt = st.flags.length ? st.flags.map((f) => f.text).join("；") : `Form ${st.form != null ? Math.round(st.form) : "—"}、睡眠 ${st.sleep != null ? st.sleep.toFixed(1) + "h" : "—"}，没有红旗`;
     const lv = st.level === "low" ? "偏疲劳：只给恢复与短有氧" : st.level === "fresh" ? "有余量：可以上强度" : "正常：按剂量推进";
-    hint.textContent = `${lv}。依据：${reasonTxt}。`;
+    const tail = st.planToday.length
+      ? `今天日历里的 ${st.planToday.map((w) => w.name).join("、")} 还只是计划（未练），别把它当已完成负荷；`
+      : "";
+    hint.textContent = `${lv}。依据：${reasonTxt}。${tail}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
   }
 
   const list = $("course-list");
@@ -495,7 +514,7 @@ function openCourseSheet(c) {
   $("course-sheet-body").innerHTML = renderMarkdown(
     `**这节练什么**：${c.why}\n\n**结构（室内 FTP ${ftp}W）**\n${steps}\n\n**判定：${verdict}** — ${reason}\n\n**依据**：${basis}`
   );
-  $("course-sheet-hint").textContent = "功率按 %FTP 写入 ICU，之后改 FTP 会自动跟着变；写入前会再确认一次。";
+  $("course-sheet-hint").textContent = "功率按 %FTP 写入 ICU，之后改 FTP 会自动跟着变。注意：写进去的是「计划」，会进 ICU 的 CTL/ATL 曲线，但不等于已完成——本页的 Form 只按已完成活动算。";
   $("course-sheet").classList.remove("hidden");
 }
 
@@ -533,6 +552,7 @@ if (courseWriteBtn) {
       start_date_local: `${dateStr}T21:30:00`,
       moving_time: currentCourse.minutes * 60,
       description: courseDescription(currentCourse, ftp),
+      not_on_fitness_chart: !!($("course-no-chart") && $("course-no-chart").checked),
     };
     if (!confirm(`把「${currentCourse.name}」写进 ${dateStr} 21:30 的 ICU 日历吗？`)) return;
     courseWriteBtn.disabled = true;

@@ -21,6 +21,35 @@ function daysAgo(n) {
   return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 }
 
+// 按“完成的活动”重算 CTL/ATL/Form（42d / 7d 指数加权），
+// 用来对照 ICU 自己那套数字——ICU 的 CTL/ATL 会把日历里的计划课一起算进曲线，
+// 计划一写就抬数，但它还没发生，不能当已完成负荷。
+function actualLoad(acts, days = 63, todayStr) {
+  const byDate = new Map();
+  for (const a of acts || []) {
+    const d = a && a.start_date_local ? String(a.start_date_local).slice(0, 10) : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    byDate.set(d, (byDate.get(d) || 0) + (Number(a.icu_training_load) || 0));
+  }
+  let ctl = 0;
+  let atl = 0;
+  let last = { date: todayStr, tss: 0, ctl: 0, atl: 0 };
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.parse(todayStr) - i * 86400000).toISOString().slice(0, 10);
+    const tss = byDate.get(d) || 0;
+    ctl += (tss - ctl) / 42;
+    atl += (tss - atl) / 7;
+    last = { date: d, tss, ctl, atl };
+  }
+  return {
+    ctl: Math.round(last.ctl * 10) / 10,
+    atl: Math.round(last.atl * 10) / 10,
+    form: Math.round((last.ctl - last.atl) * 10) / 10,
+    tss_today: Math.round(last.tss),
+    basis: `${days} 天已完成活动`,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ ok: false, error: "仅支持 GET" });
@@ -38,9 +67,9 @@ export default async function handler(req, res) {
     ["profile", () => icu.profile()],
     ["fitness", () => icu.latestFitness()],
     ["wellness", () => icu.wellness(14)],
-    ["activities", () => icu.activities({ oldest: daysAgo(30) })],
+    ["activities", () => icu.activities({ oldest: daysAgo(180) })],
     ["daily", () => getTodayDaily(icu)],
-    ["today_plan", () => icu.events({ oldest: daysAgo(0), newest: daysAgo(-2) })],
+    ["today_plan", () => icu.events({ oldest: daysAgo(14), newest: daysAgo(-14) })],
   ];
   await Promise.all(
     jobs.map(async ([key, fn]) => {
@@ -91,18 +120,51 @@ export default async function handler(req, res) {
   );
   out.week_days = new Set(weekActs.map((a) => String(a.start_date_local).slice(0, 10))).size;
 
-  // 今天的日历安排（有课/休息日）
+  // 日历区分「计划」与「已练」：
+  // WORKOUT 事件有 paired_activity_id = 已被某次活动完成（训练后）；
+  // 没有 = 只是计划，还没发生，但它会进 ICU 的 CTL/ATL 曲线（本应用不把它算作已完成负荷）。
   const todayLocalDate = nowLocalDate.toISOString().slice(0, 10);
   const evs = Array.isArray(out.today_plan) ? out.today_plan : [];
-  // 只取真正的课表事件（WORKOUT），排除便签/记忆/今日建议这类 NOTE
-  const todays = evs.filter(
-    (e) =>
-      String(e.start_date_local || "").slice(0, 10) === todayLocalDate &&
-      String(e.category || "").toUpperCase() === "WORKOUT"
-  );
-  out.today_workout = todays.length
-    ? { name: todays[0].name || "", category: todays[0].category || "", type: todays[0].type || "" }
+  const workouts = evs
+    .filter((e) => String(e.category || "").toUpperCase() === "WORKOUT")
+    .map((e) => {
+      const date = String(e.start_date_local || "").slice(0, 10);
+      const load = Number(e.icu_training_load) || 0;
+      const paired = e.paired_activity_id || null;
+      return {
+        id: e.id,
+        date,
+        name: e.name || "",
+        load,
+        paired,
+        status: paired ? "completed" : "planned",
+        type: e.type || "",
+      };
+    });
+
+  const todayEvents = workouts.filter((w) => w.date === todayLocalDate);
+  const todayDone = todayEvents.filter((w) => w.status === "completed");
+  const todayPlanned = todayEvents.filter((w) => w.status === "planned");
+  out.today_workout = todayEvents.length
+    ? { ...todayEvents[0], has_completed: todayDone.length > 0, has_planned: todayPlanned.length > 0 }
     : null;
+
+  // 今日已练 / 今日计划（未练）分开给前端
+  out.today_completed = todayDone.map((w) => ({ name: w.name, load: w.load, paired: w.paired }));
+  out.today_planned = todayPlanned.map((w) => ({ name: w.name, load: w.load, id: w.id }));
+  out.today_planned_load = todayPlanned.reduce((s, w) => s + w.load, 0);
+
+  // 未来 14 天的计划（只含未完成的），用于提示“这些数字还没发生”
+  out.upcoming_planned = workouts
+    .filter((w) => w.status === "planned" && w.date > todayLocalDate && w.date <= daysAgo(-14))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .slice(0, 10)
+    .map((w) => ({ id: w.id, date: w.date, name: w.name, load: w.load }));
+
+  // 完成的活动重算负荷，与 ICU 的 fitness 并排展示
+  out.fitness_actual = actualLoad(acts, 182, todayLocalDate);
+  // ICU 自己的数字（可能把计划课算进去），保留原字段不动
+  if (out.fitness) out.fitness_planned_included = true;
 
   // 不对前端暴露原始事件列表（里面可能有记忆便签）
   delete out.today_plan;
