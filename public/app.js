@@ -293,19 +293,6 @@ const COURSES = [
     ],
   },
   {
-    id: "sweet-2x25",
-    sys: "sweet",
-    name: "甜区 2×25min（解除限制剂量）",
-    why: "甜区（88-92% FTP）加长版：把连续输出总量做到 50min，专补 20 分钟续航。",
-    steps: [
-      { label: "Warm-up", min: 12, pct: [50, 70], cad: 90, ramp: true },
-      { label: "Sweet Spot 1", min: 25, pct: [90, 90], cad: 88 },
-      { label: "Recovery", min: 5, pct: [55, 55], cad: 80 },
-      { label: "Sweet Spot 2", min: 25, pct: [90, 90], cad: 88 },
-      { label: "Cool-down", min: 13, pct: [50, 50], cad: 80 },
-    ],
-  },
-  {
     id: "threshold-3x8",
     sys: "threshold",
     name: "阈值 3×8min",
@@ -462,24 +449,15 @@ function rateCourse(c, st) {
     if (key === "z2") return ["不推荐", "先补恢复与睡眠，长有氧往后放"];
     return ["不推荐", "强度课会在恢复不足时加深疲劳"];
   }
-  // 20 分钟续航是短板：甜区长段优先，8 分钟重复的阈值课往后排
-  if (weak) {
-    if (key === "sweet" && c.id === "sweet-2x25")
-      return st.ignoreTime
-        ? ["推荐", `解除限制：今天把甜区总量做到 50min（2×25），续航短板（${weakProof}）一次补足`]
-        : ["不推荐", `2×25 是解除限制的剂量（${weakProof}）；先把 2×20 稳住，再往上加`];
-    if (key === "sweet" && st.ignoreTime)
-      return ["可选", `解除限制按加长版 2×25 给剂量；2×20 先稳住（短板：${weakProof}）`];
-    if (key === "sweet") return ["推荐", `20 分钟连续输出是短板（${weakProof}）：先用 2×20 甜区把续航补起来`];
+  // 解除限制 = 不看时段与时长，改按短板选课型；关闭时按常规状态排，3×8 阈值照常可用
+  if (st.ignoreTime && weak) {
+    if (key === "sweet")
+      return ["推荐", `解除限制：短板是 20 分钟续航（${weakProof}），今天用 2×20 甜区针对性补，不加难度`];
     if (key === "threshold") return ["不推荐", `8 分钟重复补不到 20min 续航（${weakProof}），等能连续 20min 再上阈值`];
     if (key === "vo2") return ["可选", "摄氧不是当前短板，优先级低于甜区长段"];
     if (key === "z2" && cMinutes === 85) return ["可选", "有氧底要保，但今天优先级低于甜区长段"];
     if (key === "z2" && cMinutes >= 120) return ["可选", "有氧底可以补，但今天短板是 20 分钟续航，先甜区"];
   }
-  if (c.id === "sweet-2x25" && !weak)
-    return st.ignoreTime
-      ? ["可选", "解除限制剂量：身体允许就上，才补得动续航"]
-      : ["不推荐", "这是解除限制的剂量，平时用 2×20 就够"];
   if (level === "fresh") {
     if (key === "threshold") return ["推荐", "恢复有余量，这周正缺阈值刺激"];
     if (key === "vo2") return ["推荐", "有余量且距上次 ≥2 天，摄氧课可以上"];
@@ -602,7 +580,7 @@ function renderCourses() {
     const histTxt = h
       ? `持续能力：${h.test ? `${h.test.date} 测试最长工作段 ${h.test.longest_min != null ? h.test.longest_min + "min" : "无 WORK 段"}` : "近 45 天没做测试"}${h.sustained ? `；近 21 天 ≥88%FTP 最长连续 ${h.sustained.min}min` : "；近 21 天没有 ≥88%FTP 连续段"}。${h.weak_sustained ? "判定：20 分钟续航是短板，甜区长段优先。" : ""}`
       : "";
-    hint.textContent = `${lv}。依据：${reasonTxt}。${histTxt}${tail}${st.ignoreTime ? "解除限制已开：不看时段与时长，只按短板给剂量。" : ""}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
+    hint.textContent = `${lv}。依据：${reasonTxt}。${histTxt}${tail}${st.ignoreTime ? "解除限制已开：不看时段与时长，改按短板选课型，难度不加大。" : ""}Form/CTL/ATL 按${st.loadSource === "已练" ? "已完成活动重算" : "ICU 原值（可能含计划课）"}。`;
   }
 
   renderPlanCard(d, st);
