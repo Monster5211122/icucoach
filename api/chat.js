@@ -1,5 +1,5 @@
 import { createIcuClient } from "../lib/icu.js";
-import { chatCompletionRaw, chatCompletionStream, llmEnv, withAutoThinking } from "../lib/llm.js";
+import { chatCompletionRaw, chatCompletionStream, llmEnv, withAutoThinking, extractDsmlCalls, stripDsml, createDsmlStripper } from "../lib/llm.js";
 import { coachSystem, buildChatDataBlock } from "../lib/prompts.js";
 import { summarizeActivity, buildDeepContext, markReviewed } from "../lib/review.js";
 import { appendMemory, memoryContext } from "../lib/memory.js";
@@ -87,11 +87,24 @@ const TOOLS = [
             enum: ["Ride", "Rest"],
             description: "Ride=骑行课，Rest=休息日",
           },
-          start_date_local: { type: "string", description: "日期，格式 YYYY-MM-DD" },
+          start_date_local: { type: "string", description: "日期，格式 YYYY-MM-DD（只写日期，不要带时间）" },
           description: {
             type: "string",
             description:
-              "ICU 原生 workout 文本，如：- 15m 55% 85-95rpm\\nMain set 2x\\n- 20m 95%\\n- 5m 50%；Rest 时留空",
+              "ICU 原生 workout 文本，必须每段一行，如：- 12m ramp 55-70%\\n- 20m 90%\\n- 5m 55%\\n- 20m 90%\\n- 13m 50%。不要写中文散文，散文不会生成结构。",
+          },
+          steps: {
+            type: "array",
+            description: "也可以用分段数组代替 description；两者都有时优先 description 里带结构化行",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string", description: "段名，如 Warm-up / Sweet Spot 1 / Recovery" },
+                minutes: { type: "integer", description: "该段分钟数" },
+                pct: { type: "array", items: { type: "number" }, description: "强度 %FTP，单值写 [90,90]，递进写 [55,70]" },
+              },
+              required: ["label", "minutes", "pct"],
+            },
           },
           moving_time: { type: "integer", description: "预计总秒数，可选" },
         },
@@ -158,10 +171,34 @@ const TOOL_INSTRUCTIONS = `\n\n【工具使用规则】
 - 每复盘完一个活动，调用 mark_reviewed 准备标记，并在回复末尾说明「已准备好标记，点下面的“确认写入 ICU”才会写回」；**绝不能说“已写入/已标记”**，因为工具只做暂存；
 - 用户问“今天怎么练/今天练什么”时，不要只说方向：按「判决（练/降档练/不练）→ 今天这一节（热身/主段/组间/放松，每段写确切分钟数、瓦数区间、踏频）→ 体感校准（RPE 与心率红线）→ 降一档 → 停的条件 → 为什么」给，读完他能直接上台骑。
 - 用户说“排这周课表/给我排几天”时：先把每天的课排好（按上面的时段、时长、强度两端分化、灰区占比规则），再调用 create_workouts 准备批量写入（同样要等用户点确认）；不要预排他练不了的天数，每周至少留 1-2 天恢复或休息。
-- 用户明确要求写课表（如“把今天这节课写进 ICU”“帮我写一节甜区课”）时，调用 create_workout 准备课表，复述课表内容和日期，并说明「等你点下面的‘确认写入 ICU’按钮才会写进日历」；**禁止说已写入**；
+- 用户明确要求写课表（如“把今天这节课写进 ICU”“帮我写一节甜区课”）时，调用 create_workout 准备课表：description 必须写成 ICU 结构化文本，**一段一行**（形如「- 12m ramp 55-70%」「- 20m 90%」），或直接给 steps 数组；**中文字数再详细也不会生成结构**。复述课表内容和日期，并说明「等你点下面的‘确认写入 ICU’按钮才会写进日历」；**禁止说已写入**；
+- 工具参数只许用 schema 里有的字段名；不要自创字段，也不要把调用写成文本标签（任何「<| | DSML | | ...>」形式的输出都会被当作无效内容剔除）。
 - 遇到值得长期记住的用户特征、训练偏好、重要结论或伤病情况时，调用 remember 写入教练记忆；同样的内容不要重复记；
 - 用户说出任何**训练约束**时必须 remember 一条（这类信息会进入课表与每日建议，不记就等于下次又要他重复一遍）：可用时段（如"白天午睡 13:00-15:30、晚上 21:30 后"）、单次时长上限、哪几天完全没空、身体问题（坐垫疼/膝痛/腰紧）、装备条件（没穿骑行裤、只有骑行台）、睡眠与工作安排；
 - 已标记（reviewed=true）的活动可以略过或只用于趋势对比，重点复盘未标记的。`;
+
+  // 模型有时给 steps 数组而不是 ICU 文本：这里转成 ICU 能解析的结构化行
+function workoutTextFromSteps(steps) {
+  if (!Array.isArray(steps) || !steps.length) return "";
+  return steps
+    .map((sg) => {
+      const mins = Number(sg && (sg.minutes != null ? sg.minutes : sg.min));
+      if (!Number.isFinite(mins) || mins <= 0) return "";
+      const raw = sg.pct != null ? sg.pct : sg.power != null ? sg.power : sg.percent;
+      let power = "";
+      if (Array.isArray(raw) && raw.length >= 2) {
+        const a = Number(raw[0]), b = Number(raw[1]);
+        power = Number.isFinite(a) && Number.isFinite(b) && a !== b ? `ramp ${a}-${b}%` : `${a}%`;
+      } else if (raw != null && Number.isFinite(Number(raw))) {
+        power = `${Number(raw)}%`;
+      }
+      if (!power) return "";
+      const label = sg.label ? `# ${String(sg.label).slice(0, 40)}\n` : "";
+      return `${label}- ${mins}m ${power}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
 
 // 工具调用阶段：只跑“取数据”的轮次，最多 2 轮，且用低思考档位省时间
 // 返回 { msgs, answered }：answered 有值说明模型没调工具、已经直接答完了
@@ -169,9 +206,21 @@ async function toolPhase(messages, tools, executor, env, maxRounds = 2) {
   const msgs = [...messages];
   for (let round = 0; round < maxRounds; round++) {
     const msg = await chatCompletionRaw(msgs, env, { tools });
+    // 有的模型把工具调用写成 DSML 标记文本：解析出来照常执行，并把标记从正文剔掉
+    const dsml = extractDsmlCalls(msg.content || "");
+    if ((!msg.tool_calls || msg.tool_calls.length === 0) && dsml.calls.length) {
+      msg.tool_calls = dsml.calls.map((c, i) => ({
+        id: `dsml_${round}_${i}`,
+        type: "function",
+        function: { name: c.name, arguments: JSON.stringify(c.args || {}) },
+      }));
+      msg.content = dsml.text;
+    } else if (/DSML/.test(msg.content || "")) {
+      msg.content = dsml.text;
+    }
     msgs.push(msg);
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      return { msgs, answered: msg.content || "" };
+      return { msgs, answered: stripDsml(msg.content || "") };
     }
     for (const tc of msg.tool_calls) {
       let result;
@@ -241,7 +290,7 @@ export default async function handler(req, res) {
 
   // 工具执行器（闭包持有 icu 客户端）
   const staged = []; // 本次对话里等用户点「确认写入」的动作
-  async function executeTool(name, args) {
+async function executeTool(name, args) {
     if (name === "list_activities") {
       const days = Math.min(30, Math.max(1, Number(args.days) || 14));
       const acts = await icu.activities({ oldest: daysAgo(days) });
@@ -284,15 +333,22 @@ export default async function handler(req, res) {
       };
     }
     if (name === "create_workout") {
-      const date = String(args.start_date_local || "").slice(0, 10);
+      const date = String(args.start_date_local || args.date || "").slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        throw new Error("日期格式不对，应为 YYYY-MM-DD");
+        throw new Error("日期格式不对，应为 YYYY-MM-DD（模型给的是：" + (args.start_date_local || args.date || "空") + "）");
       }
+      let description = typeof args.description === "string" ? args.description.trim() : "";
+      // 只有散文没有 "- 12m 90%" 这类结构化行时，用 steps 生成，否则 ICU 只当备注、不会生成结构
+      if (!/\d+\s*m\s+\d/.test(description)) {
+        const built = workoutTextFromSteps(args.steps);
+        if (built) description = built;
+      }
+      if (!description) throw new Error("课表缺少结构化内容：请提供 description（ICU 文本）或 steps");
       const workout = {
         name: String(args.name || "训练课").slice(0, 120),
         type: args.type === "Rest" ? "Rest" : "Ride",
         start_date_local: date + "T00:00:00",
-        description: typeof args.description === "string" ? args.description : "",
+        description,
         moving_time: Number.isFinite(Number(args.moving_time)) ? Number(args.moving_time) : null,
       };
       staged.push({ kind: "workouts", workouts: [workout], source: "教练对话", label: `写入 1 节课：${workout.name}（${date}）` });
@@ -442,11 +498,15 @@ export default async function handler(req, res) {
     try {
       if (preAnswer) {
         // 模型已经在工具阶段答完，直接吐出去，不再多花一轮
-        send({ type: "delta", text: preAnswer });
+        send({ type: "delta", text: stripDsml(preAnswer) });
       } else {
         // 已经等太久就别再上高档思考，先保证这轮能落地
         const finalEnv = elapsedMs(t0) > 25000 ? withAutoThinking(llmEnv(req.headers), "low") : env;
-        await chatCompletionStream(msgs, finalEnv, (text) => send({ type: "delta", text }));
+        const stripper = createDsmlStripper();
+        await chatCompletionStream(msgs, finalEnv, (text) => {
+          const clean = stripper(text);
+          if (clean) send({ type: "delta", text: clean });
+        });
       }
       send({ type: "done", pending: staged });
     } catch (e) {

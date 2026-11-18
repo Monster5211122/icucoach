@@ -38,8 +38,19 @@ export default async function handler(req, res) {
         };
       });
       const created = await icu.writeWorkouts(workouts);
+      // 写完回读一次：确认事件真的在 ICU 日历里，而不是「接口返回 200 但没落库」
+      let verified = true;
+      try {
+        const dates = workouts.map((w) => String(w.start_date_local).slice(0, 10)).sort();
+        const evs = await icu.events({ oldest: dates[0], newest: dates[dates.length - 1] });
+        const ids = new Set((evs || []).map((e) => String(e.id)));
+        verified = created.every((ev) => ids.has(String(ev.id)));
+      } catch {
+        verified = false;
+      }
       return res.status(200).json({
         ok: true,
+        verified,
         written: created.map((ev) => ({
           id: ev.id,
           name: ev.name,
