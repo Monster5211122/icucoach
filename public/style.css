@@ -289,7 +289,7 @@ body.chat-mode {
   display: flex;
   flex-direction: column;
   height: 100%;
-  height: 100dvh;
+  height: var(--vv, 100dvh);
   padding-bottom: 0 !important;
 }
 body.chat-mode .topbar { flex: 0 0 auto; }

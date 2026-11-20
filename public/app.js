@@ -1440,6 +1440,7 @@ api("/api/coach?action=llm_info")
   .then(() => renderThinkButton());
 
 $("btn-chat-send").addEventListener("click", () => sendChat());
+$("chat-input").addEventListener("focus", () => setTimeout(fitChatViewport, 120));
 $("chat-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
@@ -1825,6 +1826,19 @@ if ("serviceWorker" in navigator) {
 
 // 默认开始日期设为今天（当天可选课表模式）
 $("plan-start").value = new Date().toISOString().slice(0, 10);
+
+// iOS 键盘弹出时，visualViewport 高度会收缩；按它重设聊天页高度，输入框才不会被键盘盖住
+function fitChatViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  document.body.style.setProperty("--vv", vv.height + "px");
+  const wrap = $("chat-wrap");
+  if (wrap) wrap.scrollTop = wrap.scrollHeight;
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fitChatViewport);
+  window.visualViewport.addEventListener("scroll", fitChatViewport);
+}
 
 loadSettingsIntoForm();
 syncChatIgnore();
