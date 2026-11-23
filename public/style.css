@@ -289,7 +289,7 @@ body.chat-mode {
   display: flex;
   flex-direction: column;
   height: 100%;
-  height: var(--vv, 100dvh);
+  height: 100dvh;
   padding-bottom: 0 !important;
 }
 body.chat-mode .topbar { flex: 0 0 auto; }
@@ -310,9 +310,16 @@ body.chat-mode .chat-wrap {
   padding-bottom: 8px;
 }
 body.chat-mode .chat-inputbar {
-  flex: 0 0 auto;
-  padding: 8px 0 calc(env(safe-area-inset-bottom) + 10px);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--kb, env(safe-area-inset-bottom));
+  z-index: 20;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 10px);
   background: var(--bg);
+}
+body.chat-mode #chat-chips {
+  margin-bottom: calc(var(--bar, 76px) + var(--kb, 0px));
 }
 body.chat-mode .chat-inputbar textarea { max-height: 96px; }
 

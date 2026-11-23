@@ -1831,7 +1831,11 @@ $("plan-start").value = new Date().toISOString().slice(0, 10);
 function fitChatViewport() {
   const vv = window.visualViewport;
   if (!vv) return;
-  document.body.style.setProperty("--vv", vv.height + "px");
+  // 键盘高度 = 窗口高 - 可视区高；输入栏 fixed 到键盘上方，避免整页被顶起把消息挤出屏幕
+  const kb = Math.max(0, Math.min(window.innerHeight - vv.height, window.innerHeight));
+  document.body.style.setProperty("--kb", kb + "px");
+  const bar = $("chat-inputbar");
+  if (bar) document.body.style.setProperty("--bar", bar.offsetHeight + "px");
   const wrap = $("chat-wrap");
   if (wrap) wrap.scrollTop = wrap.scrollHeight;
 }
@@ -1839,6 +1843,7 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", fitChatViewport);
   window.visualViewport.addEventListener("scroll", fitChatViewport);
 }
+fitChatViewport();
 
 loadSettingsIntoForm();
 syncChatIgnore();
