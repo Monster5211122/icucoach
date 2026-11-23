@@ -1,5 +1,5 @@
 // Service Worker：页面与脚本走网络优先（保证新版本立即生效），其余静态资源缓存优先，API 始终走网络
-const CACHE = "icucoach-v61";
+const CACHE = "icucoach-v62";
 const STATIC = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
